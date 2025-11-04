@@ -29,17 +29,19 @@
 
 ```
 scopus-wos-tools/
+├── run_complete_workflow.py       # 🌟 完整工作流（推荐，一行命令）(NEW)
 ├── scopus_to_wos_converter.py    # Scopus CSV → WOS格式转换器
 ├── merge_deduplicate.py           # WOS & Scopus 合并去重工具
 ├── analyze_records.py             # 文献数据统计分析工具 (NEW)
 ├── filter_language.py             # 语言筛选工具 (NEW)
 ├── test_converter.py              # 转换器测试工具
-├── run_all.sh                     # 一键运行完整流程
+├── run_all.sh                     # 一键运行脚本（传统方式）
 ├── config/                        # 配置文件目录 (NEW)
 │   ├── country_mapping.json       # 国家名称标准化配置
 │   ├── biomedical_institutions.json  # 生物医学机构配置
 │   ├── institution_config.json    # 机构识别配置
 │   └── journal_abbrev.json        # 期刊缩写配置
+├── QUICK_START.md                 # 快速开始指南 (NEW)
 ├── CLAUDE.md                      # 项目开发指南 (NEW)
 ├── UPGRADE_GUIDE.md               # v2.1升级指南 (NEW)
 ├── README.md                      # 本文件
@@ -55,7 +57,36 @@ scopus-wos-tools/
 - Python 3.6+
 - WOS和Scopus导出的原始数据文件
 
-### 使用步骤
+### 💡 最简单的方式（一行命令，推荐）
+
+如果你想一次性完成所有处理并获得详细报告：
+
+```bash
+python3 run_complete_workflow.py --data-dir "/你的数据文件夹路径"
+```
+
+**示例**：
+```bash
+python3 run_complete_workflow.py --data-dir "/Users/xxx/文献计量学/Nano_NSCLC_Immune"
+```
+
+这个命令会自动完成：
+1. ✅ 转换 Scopus → WOS 格式
+2. ✅ 合并 WOS + Scopus
+3. ✅ 去除重复文献
+4. ✅ 筛选英文文献
+5. ✅ 生成详细统计报告（包含 Article/Review 分布，供论文写作参考）
+
+生成的文件：
+- `merged_deduplicated.txt` - 合并去重后的完整数据
+- `english_only.txt` - 仅英文文献（推荐用于分析）
+- `workflow_complete_report.txt` - 详细统计报告（论文写作参考）
+
+**详细说明请参考**: [QUICK_START.md](QUICK_START.md)
+
+---
+
+### 使用步骤（手动分步）
 
 #### 1️⃣ 准备数据文件
 将以下文件放在项目目录中：
@@ -263,6 +294,7 @@ results <- biblioAnalysis(M)
 
 ## 📚 详细文档
 
+- [QUICK_START.md](QUICK_START.md) - 快速开始指南（新手必读）
 - [CLAUDE.md](CLAUDE.md) - 项目开发指南和架构说明
 - [UPGRADE_GUIDE.md](UPGRADE_GUIDE.md) - v2.1版本升级指南
 - [LICENSE](LICENSE) - MIT开源许可证
@@ -370,9 +402,12 @@ WOS格式中常见的语言字段值：
 ## 📝 更新日志
 
 ### v2.1 (2025-11-04)
+- ✨ 新增 `run_complete_workflow.py` 完整工作流脚本（一行命令完成所有处理）
 - ✨ 新增 `analyze_records.py` 文献数据统计分析工具
 - ✨ 新增 `filter_language.py` 语言筛选工具（可筛选英文等特定语言文献）
 - ✨ 新增 `config/` 配置系统（国家映射、机构配置、期刊缩写）
+- ✨ 新增 `QUICK_START.md` 快速开始指南
+- ✅ 自动生成详细统计报告（包含 Article/Review 分布，供论文写作参考）
 - ✅ 国家名称标准化（46种映射规则）
 - ✅ 生物医学领域机构识别优化
 - ✅ 国际合作网络分析
