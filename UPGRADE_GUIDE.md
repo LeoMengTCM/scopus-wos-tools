@@ -175,7 +175,88 @@ python3 merge_deduplicate.py --log-level ERROR
 
 ---
 
-### 7. 单元测试
+### 7. 新增语言筛选功能 ⭐
+
+**新工具**：`filter_language.py` - 语言筛选工具
+
+**功能**：
+- 筛选指定语言的文献记录
+- 支持英文、中文、德文等多种语言
+- 生成详细的语言分布统计报告
+- 保持标准WOS格式和UTF-8 BOM编码
+
+**使用示例**：
+```bash
+# 筛选英文文献
+python3 filter_language.py merged_deduplicated.txt english_only.txt --language English
+
+# 筛选中文文献
+python3 filter_language.py merged_deduplicated.txt chinese_only.txt --language Chinese
+
+# 查看帮助
+python3 filter_language.py --help
+```
+
+**生成报告**：
+```
+============================================================
+语言筛选报告 / Language Filter Report
+============================================================
+
+输入文件: merged_deduplicated.txt
+输出文件: english_only.txt
+目标语言: English
+
+------------------------------------------------------------
+筛选结果:
+------------------------------------------------------------
+总记录数:                500
+筛选后记录数:            450
+无语言字段记录:            5
+保留比例:               90.0%
+
+------------------------------------------------------------
+语言分布:
+------------------------------------------------------------
+  English             :   450 ( 90.0%) ✓
+  Chinese             :    30 (  6.0%)
+  German              :    15 (  3.0%)
+  French              :     5 (  1.0%)
+============================================================
+```
+
+**应用场景**：
+- 仅分析英文文献（国际期刊投稿参考）
+- 比较不同语言文献的特征
+- 清理混合语言数据集
+- 语言偏好分析
+
+---
+
+### 8. 新增文献统计分析功能 ⭐
+
+**新工具**：`analyze_records.py` - 文献数据统计分析工具
+
+**功能**：
+- 国家/地区分布统计（支持46种国家名称标准化）
+- 高产机构排名（Top 20）
+- 年份分布趋势
+- 国际合作网络分析
+- 高产作者统计（第一作者）
+
+**配置系统**：
+- `config/country_mapping.json` - 国家名称标准化配置
+- `config/biomedical_institutions.json` - 生物医学机构配置
+
+**使用示例**：
+```bash
+python3 analyze_records.py merged_deduplicated.txt
+python3 analyze_records.py merged_deduplicated.txt --config-dir config
+```
+
+---
+
+### 9. 单元测试
 
 新增 `test_converter.py`：
 - 测试作者姓名转换
@@ -199,13 +280,17 @@ python3 -m unittest test_converter.TestInstitutionRecognition.test_independent_c
 ```
 scopus-wos-tools/
 ├── config/
-│   ├── journal_abbrev.json          # 期刊缩写配置（新增）
-│   └── institution_config.json      # 机构识别配置（新增）
-├── test_converter.py                # 单元测试（新增）
-├── UPGRADE_GUIDE.md                 # 本文档（新增）
-├── CLAUDE.md                        # Claude Code文档（新增）
-├── scopus_to_wos_converter.py       # 主程序（优化）
-└── merge_deduplicate.py             # 合并工具（优化）
+│   ├── journal_abbrev.json              # 期刊缩写配置（新增）
+│   ├── institution_config.json          # 机构识别配置（新增）
+│   ├── country_mapping.json             # 国家名称映射（新增）
+│   └── biomedical_institutions.json     # 生物医学机构配置（新增）
+├── filter_language.py                   # 语言筛选工具（新增）⭐
+├── analyze_records.py                   # 统计分析工具（新增）⭐
+├── test_converter.py                    # 单元测试（新增）
+├── UPGRADE_GUIDE.md                     # 本文档（新增）
+├── CLAUDE.md                            # Claude Code文档（新增）
+├── scopus_to_wos_converter.py           # 主程序（优化）
+└── merge_deduplicate.py                 # 合并工具（优化）
 ```
 
 ---
@@ -277,6 +362,12 @@ python3 scopus_to_wos_converter.py --log-level DEBUG
 
 # 指定自定义路径
 python3 scopus_to_wos_converter.py data/input.csv results/output.txt
+
+# 语言筛选（新功能）
+python3 filter_language.py merged_deduplicated.txt english_only.txt --language English
+
+# 统计分析（新功能）
+python3 analyze_records.py merged_deduplicated.txt --config-dir config
 ```
 
 ---

@@ -13,7 +13,8 @@
 1. ✅ 将Scopus CSV格式转换为标准WOS纯文本格式
 2. ✅ 智能合并两个数据库的数据
 3. ✅ 自动识别并去除重复文献
-4. ✅ 生成可直接用于文献计量分析的标准WOS格式文件
+4. ✅ 筛选指定语言的文献（如仅保留英文文献）
+5. ✅ 生成可直接用于文献计量分析的标准WOS格式文件
 
 ### 核心优势
 - **高精度转换**：95%+字段转换准确率
@@ -31,6 +32,7 @@ scopus-wos-tools/
 ├── scopus_to_wos_converter.py    # Scopus CSV → WOS格式转换器
 ├── merge_deduplicate.py           # WOS & Scopus 合并去重工具
 ├── analyze_records.py             # 文献数据统计分析工具 (NEW)
+├── filter_language.py             # 语言筛选工具 (NEW)
 ├── test_converter.py              # 转换器测试工具
 ├── run_all.sh                     # 一键运行完整流程
 ├── config/                        # 配置文件目录 (NEW)
@@ -75,7 +77,16 @@ chmod +x run_all.sh
 - `merged_deduplicated.txt` - **最终文件**（合并去重后，可直接用于分析）
 - `merged_deduplicated_report.txt` - 详细的去重报告
 
-#### 4️⃣ 统计分析（可选）
+#### 4️⃣ 语言筛选（可选）
+如果只需要分析英文文献：
+```bash
+python3 filter_language.py merged_deduplicated.txt english_only.txt --language English
+```
+将生成：
+- `english_only.txt` - 仅包含英文文献的文件
+- `english_only_filter_report.txt` - 语言分布统计报告
+
+#### 5️⃣ 统计分析（可选）
 对合并后的数据进行统计分析：
 ```bash
 python3 analyze_records.py merged_deduplicated.txt
@@ -159,7 +170,14 @@ python3 merge_deduplicate.py
 python3 merge_deduplicate.py wos.txt scopus_converted.txt merged.txt
 ```
 
-#### 步骤3：统计分析（可选）
+#### 步骤3：语言筛选（可选）
+```bash
+python3 filter_language.py merged_deduplicated.txt english_only.txt --language English
+# 支持其他语言，如：
+python3 filter_language.py merged_deduplicated.txt chinese_only.txt --language Chinese
+```
+
+#### 步骤4：统计分析（可选）
 ```bash
 python3 analyze_records.py merged_deduplicated.txt
 # 或指定配置目录
@@ -292,6 +310,34 @@ for file in *.csv; do
 done
 ```
 
+### 语言筛选高级用法
+
+#### 查看所有支持的语言
+筛选工具会自动识别WOS文件中的所有语言，并在报告中显示语言分布。
+
+#### 筛选特定语言
+```bash
+# 筛选英文文献
+python3 filter_language.py input.txt english_only.txt --language English
+
+# 筛选中文文献
+python3 filter_language.py input.txt chinese_only.txt --language Chinese
+
+# 筛选德文文献
+python3 filter_language.py input.txt german_only.txt --language German
+```
+
+#### 常见语言名称
+WOS格式中常见的语言字段值：
+- `English` - 英语
+- `Chinese` - 中文
+- `German` - 德语
+- `French` - 法语
+- `Spanish` - 西班牙语
+- `Japanese` - 日语
+- `Portuguese` - 葡萄牙语
+- `Russian` - 俄语
+
 ---
 
 ## ⚠️ 已知限制
@@ -325,10 +371,12 @@ done
 
 ### v2.1 (2025-11-04)
 - ✨ 新增 `analyze_records.py` 文献数据统计分析工具
+- ✨ 新增 `filter_language.py` 语言筛选工具（可筛选英文等特定语言文献）
 - ✨ 新增 `config/` 配置系统（国家映射、机构配置、期刊缩写）
 - ✅ 国家名称标准化（46种映射规则）
 - ✅ 生物医学领域机构识别优化
 - ✅ 国际合作网络分析
+- ✅ 语言筛选功能（支持英文、中文、德文等多种语言）
 - ✅ 添加 CLAUDE.md 项目开发指南
 - ✅ 添加 UPGRADE_GUIDE.md 升级说明
 - ✅ 完善日志系统（logging模块）
@@ -408,6 +456,14 @@ python3 scopus_to_wos_converter.py scopus.csv output.txt
 ./run_all.sh
 # 查看 merged_deduplicated_report.txt
 # 了解WOS独有、Scopus独有、重复文献的统计
+```
+
+### 场景4：筛选英文文献进行分析
+```bash
+./run_all.sh
+python3 filter_language.py merged_deduplicated.txt english_only.txt --language English
+# 得到仅包含英文文献的数据集，适合国际期刊投稿参考
+# 查看 english_only_filter_report.txt 了解语言分布
 ```
 
 ---
