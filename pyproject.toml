@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bibliometric-data-consolidation-tool"
+version = "5.1.0"
+description = "WOS-guided Scopus to WOS conversion and bibliometric data consolidation workflow."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Meng Linghan" }
+]
+dependencies = [
+  "requests>=2.31",
+]
+
+[project.optional-dependencies]
+gui = [
+  "customtkinter>=5.2",
+]
+plot = [
+  "matplotlib>=3.8",
+  "numpy>=1.26",
+  "pandas>=2.2",
+]
+full = [
+  "customtkinter>=5.2",
+  "matplotlib>=3.8",
+  "numpy>=1.26",
+  "pandas>=2.2",
+]
+dev = [
+  "ruff>=0.5",
+]
+
+[project.scripts]
+bibliometrics = "bibliometrics.cli:main"
+bibliometrics-gui = "bibliometrics.presentation.gui:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B", "UP015"]
+ignore = [
+  # 模块级延迟导入是本项目的刻意做法（避免 CLI 启动即加载 matplotlib 等重依赖）
+  "E402",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

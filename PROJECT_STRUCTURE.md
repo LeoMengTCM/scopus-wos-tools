@@ -2,7 +2,7 @@
 
 **当前定位**：以 WOS 为主标准的 Scopus→WOS 转换与整合系统  
 **当前文档状态**：post-5.1.0 本地迭代  
-**更新日期**：2026-03-07
+**更新日期**：2026-04-06
 
 ## 项目概览
 
@@ -26,6 +26,7 @@
 ├── QUICK_START.ja.md
 ├── CHANGELOG.md
 ├── PROJECT_STRUCTURE.md
+├── pyproject.toml
 ├── run_ai_workflow.py
 ├── gui_app.py
 ├── 启动GUI.command
@@ -34,7 +35,16 @@
 │   └── run_workflow.py
 ├── src/
 │   └── bibliometrics/
+│       ├── application/
+│       ├── presentation/
+│       ├── converters/
+│       ├── pipeline/
+│       ├── standardizers/
+│       ├── filters/
+│       ├── analysis/
+│       └── utils/
 ├── config/
+├── tests/
 ├── docs/
 └── archive/
 ```
@@ -42,9 +52,13 @@
 ## 核心入口
 
 - `run_ai_workflow.py`：兼容入口，推荐直接复制命令时使用
-- `scripts/run_workflow.py`：实际 CLI 入口
-- `gui_app.py`：图形界面入口
+- `scripts/run_workflow.py`：兼容脚本入口
+- `python3 -m bibliometrics ...`：安装后可用的包入口
+- `gui_app.py`：兼容图形界面入口
+- `bibliometrics-gui`：安装 `[gui]` 额外依赖后可用的 GUI 入口
 - `启动GUI.command`：macOS 下的 GUI 快捷入口
+
+兼容入口保留在根目录，真正的实现代码已收口到 `src/bibliometrics/` 包内。
 
 ## 示例与验证目录
 
@@ -57,6 +71,22 @@
 ## 源码目录
 
 核心代码位于 `src/bibliometrics/`。
+
+### `src/bibliometrics/application/`
+
+- 工作流编排
+- 工作流配置模型
+- 结果报告生成
+- CLI 所调用的应用层入口
+
+这层负责“怎么把各模块串起来”，不再和兼容脚本或 GUI 壳代码混在一起。
+
+### `src/bibliometrics/presentation/`
+
+- GUI 启动器
+- GUI 界面实现
+
+这层只处理用户交互，不承担业务编排职责。
 
 ### `src/bibliometrics/converters/`
 
@@ -75,9 +105,10 @@
 
 ### `src/bibliometrics/pipeline/`
 
-- 主工作流编排
 - WOS / Scopus 合并与去重调度
-- 各步骤衔接
+- 与旧导入路径兼容的桥接模块
+
+其中 `pipeline/workflow.py` 现在是兼容层，真正的工作流实现已迁移到 `application/workflow.py`。
 
 ### `src/bibliometrics/standardizers/`
 
@@ -111,6 +142,11 @@
 - `journal_abbrev.json`：期刊缩写映射
 - `biomedical_institutions.json`：机构知识数据
 - 各类缓存文件：AI 或标准化阶段生成并复用
+
+## 工程化补充
+
+- `pyproject.toml`：项目打包元数据、依赖声明与 console scripts
+- `tests/`：当前最小 smoke tests，覆盖 CLI 解析、工作流模型和兼容导入路径
 
 ## 当前使用文档
 
@@ -169,4 +205,5 @@
 - `__pycache__/`、`*.pyc` 不应纳入版本控制
 - macOS 资源分叉文件 `._*` 不应纳入版本控制
 - `tmp_review_*` 属于本地验证输出，应与源码和正式文档区分管理
-- 当前实际命令入口以 `run_ai_workflow.py` 和 `scripts/run_workflow.py` 为准
+- 当前最稳妥的本地入口仍是 `run_ai_workflow.py` 和 `gui_app.py`
+- 如需专业化安装方式，优先使用 `pip install -e .` 后的 `bibliometrics` / `bibliometrics-gui`

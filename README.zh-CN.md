@@ -44,12 +44,36 @@
 项目提供两个等价 CLI 入口：
 
 - `python3 run_ai_workflow.py ...`：兼容入口，最适合直接复制
-- `python3 scripts/run_workflow.py ...`：实际 CLI 入口
+- `python3 scripts/run_workflow.py ...`：兼容脚本入口
+
+如果你已经执行过：
+
+```bash
+pip install -e .
+```
+
+也可以直接使用包入口：
+
+```bash
+bibliometrics --data-dir Example --no-ai
+```
 
 如果你更喜欢图形界面：
 
 - `python3 gui_app.py`
 - 或双击 `启动GUI.command`
+
+如果你安装了 GUI 依赖：
+
+```bash
+pip install -e .[gui]
+```
+
+也可以直接运行：
+
+```bash
+bibliometrics-gui
+```
 
 ## 可复现实例
 

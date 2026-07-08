@@ -44,12 +44,36 @@ Duplicate WOS/Scopus pairs are used for **rule calibration and validation**, not
 Two equivalent CLI entry points are available:
 
 - `python3 run_ai_workflow.py ...` — compatibility entry, easiest to copy
-- `python3 scripts/run_workflow.py ...` — actual CLI entry
+- `python3 scripts/run_workflow.py ...` — compatibility script entry
+
+After an editable install:
+
+```bash
+pip install -e .
+```
+
+you can also use the packaged entry point:
+
+```bash
+bibliometrics --data-dir Example --no-ai
+```
 
 If you prefer a GUI:
 
 - `python3 gui_app.py`
 - or double-click `启动GUI.command`
+
+After installing the GUI extra:
+
+```bash
+pip install -e .[gui]
+```
+
+you can also launch:
+
+```bash
+bibliometrics-gui
+```
 
 ## Reproducible example
 

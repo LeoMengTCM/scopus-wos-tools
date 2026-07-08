@@ -1,6 +1,7 @@
 # 敏感配置文件（包含API密钥）⭐ 重要
 .env
 config/secrets.json
+config/gemini_config.json
 *_secret.json
 
 # AI 缓存备份文件（自动生成，不需要版本控制）
@@ -35,6 +36,14 @@ __pycache__/
 # *.csv
 # *.txt
 .___pycache__/
+
+# MCP 服务器本地数据库（与项目无关）
+sqlite_mcp_server.db
+
+# Python 打包产物
+*.egg-info/
+build/
+dist/
 
 # 本地审阅与示例运行产物
 /tmp_review_*/

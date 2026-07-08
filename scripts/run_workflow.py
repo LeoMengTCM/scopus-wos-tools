@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 """CLI runner for the bibliometric workflow."""
 
-import os
 import sys
+from pathlib import Path
 
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src'))
+SRC_DIR = Path(__file__).resolve().parents[1] / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
-from bibliometrics.pipeline.workflow import main
+from bibliometrics.cli import main
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())
