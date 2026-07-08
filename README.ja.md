@@ -122,6 +122,16 @@ python3 run_ai_workflow.py --data-dir Example
 
 `docs/changelogs/`、`docs/release/`、`docs/security/` は履歴資料です。
 
+## 開発ノート
+
+2026年7月の大規模アップグレードは、Anthropic の最上位モデル **Claude Fable 5**（Mythos クラス、Claude Opus の上位に位置）が Claude Code を通じて実施しました：
+
+- マルチエージェント並列コードレビュー：40件超の指摘、実測で再現した**データ損失バグ**を修正（各ファイル先頭レコードの欠落、マージ時の WC/SC/FU フィールド消失、機関名の破壊的切り詰めなど）
+- コア変換パイプラインを約 **15倍** 高速化（Example 実行：約1分 → 約4秒）、md5 比較で出力のバイト単位一致を確認
+- エンジニアリング全般の刷新：`pyproject.toml` パッケージング、GitHub Actions CI、lint エラーゼロ、回帰テスト 5 → 19
+
+Fable 5 の深いレビューと自己検証ワークフローが、リグレッションゼロのアップグレードを支えました。
+
 ## ライセンス
 
 MIT

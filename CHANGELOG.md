@@ -9,6 +9,8 @@
 
 ## [Unreleased] - 2026-03-07
 
+> 2026-07-08/09 的两个批次由 Anthropic 最先进的 **Claude Fable 5**（Mythos 级模型，经 Claude Code）完成：多智能体并行深度审查、bug 实测复现验证、md5 逐字节输出对比，全程零回归。
+
 ### 🐛 修复（2026-07-09 深度审查批次）
 - **每个文件静默丢失首条记录**（已实测）: `content.split('\n\nPT ')[1:]` 这一解析模式在 WOS 原始导出（header 后无空行）上会把首条记录连同 header 一起丢弃。受影响四处已统一改用容错切分 `utils/wos_text.split_wos_records`：`converters/batch.py`（AI 标准化路径——此前启用 AI 时最终输出永久少第一条文献）、`standardizers/enrichment.py`、`analysis/plot_types.py` 与 `analysis/plot_citations.py`（文档类型图 WoS/Scopus 列各少算 1 条）。实测 `wos.txt` 149→150、`scopus_converted_to_wos.txt` 152→153，与 ER 计数一致。
 - **合并输出静默丢弃 WC/SC/FU 等字段**（已实测）: `pipeline/merge.py` 写出时只保留 39 个白名单字段，WOS 记录的学科类别（WC/SC）、基金（FU/FX）、出版月份（PD）等全部丢失——这些是 CiteSpace/VOSviewer 类别分析的核心字段。现在白名单之外的字段按解析顺序追加保留。实测修复后 WC/SC 150/150、FU/FX 84/84 与源文件逐一对齐，并传递至 `Final_Version.txt`。

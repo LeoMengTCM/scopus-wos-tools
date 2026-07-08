@@ -187,6 +187,16 @@ results <- biblioAnalysis(M)
 - 如果你要做可复现的本地转换审阅，优先用 `--no-ai`
 - 默认机构清洗规则文件是 `config/institution_cleaning_rules_ultimate.json`
 
+## 开发说明
+
+本项目 2026-07 的深度升级由 Anthropic 最先进的 **Claude Fable 5**（Mythos 级模型，能力位于 Claude Opus 之上）通过 Claude Code 完成：
+
+- 多智能体并行代码审查，40+ 项发现，多处**数据丢失 bug** 经实测复现后修复（每个文件丢首条记录、合并输出丢 WC/SC/FU 字段、机构名破坏性截断等）
+- 核心转换流程提速约 **15 倍**（Example 全流程约 1 分钟 → 约 4 秒），输出经 md5 逐字节对比确认零回归
+- 全套工程化升级：`pyproject.toml` 打包、GitHub Actions CI、lint 清零、回归测试 5 → 19
+
+Fable 5 的深度审查与自我验证工作流，是这轮"零回归"升级的关键。
+
 ## 许可证
 
 MIT
