@@ -20,14 +20,10 @@ import os
 import sys
 import logging
 from collections import Counter, defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from ..utils.paths import resolve_project_path
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -63,7 +59,7 @@ class RecordAnalyzer:
 
         if os.path.exists(config_file):
             try:
-                with open(config_file, 'r', encoding='utf-8') as f:
+                with open(config_file, encoding='utf-8') as f:
                     data = json.load(f)
                     logger.info(f"加载了国家映射配置: {len(data.get('country_mapping', {}))} 个映射规则")
                     return data.get('country_mapping', {})
@@ -105,7 +101,7 @@ class RecordAnalyzer:
 
         logger.info(f"开始解析文件: {self.wos_file}")
 
-        with open(self.wos_file, 'r', encoding='utf-8-sig') as f:
+        with open(self.wos_file, encoding='utf-8-sig') as f:
             for line in f:
                 # 跳过文件头
                 if line.startswith('FN ') or line.startswith('VR '):
@@ -363,4 +359,5 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     sys.exit(main())

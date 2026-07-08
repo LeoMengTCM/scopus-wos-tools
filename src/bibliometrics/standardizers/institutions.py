@@ -26,15 +26,11 @@ import json
 import os
 import sys
 import logging
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List
 from collections import Counter
 
 from ..utils.paths import resolve_project_path
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -70,7 +66,7 @@ class InstitutionCleaner:
         """加载清洗规则"""
         if os.path.exists(self.config_file):
             try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
+                with open(self.config_file, encoding='utf-8') as f:
                     rules = json.load(f)
                     logger.info(f"✓ 加载清洗规则: {self.config_file}")
                     logger.info(f"  - 噪音模式: {len(rules.get('noise_patterns', []))}")
@@ -170,19 +166,18 @@ class InstitutionCleaner:
         return institution
 
     def remove_company_suffix(self, institution: str) -> str:
-        """移除公司后缀（AG, Inc, LLC等）"""
-        inst_lower = institution.lower()
+        """移除公司后缀（AG, Inc, LLC等）。
 
-        # 获取公司后缀列表
-        suffixes = self.rules.get('company_suffixes_to_remove', [])
-
-        for suffix in suffixes:
-            # 使用正则表达式匹配后缀
-            pattern = suffix.replace('$', '').strip()
-            if inst_lower.endswith(pattern):
-                # 移除后缀，保留核心名称
-                inst = institution[:-(len(pattern))]
-                return inst.strip()
+        配置项 company_suffixes_to_remove 是小写正则（如 ' inc\\.?$'、' sa$'），
+        必须按正则匹配：前导空格是词边界，直接 endswith 字面匹配会把
+        'Univ Pisa' 误截成 'Univ Pi'（' sa$' 被剥成 'sa'）。
+        """
+        for suffix_pattern in self.rules.get('company_suffixes_to_remove', []):
+            if not suffix_pattern:
+                continue
+            match = re.search(suffix_pattern, institution, flags=re.IGNORECASE)
+            if match:
+                return institution[:match.start()].strip()
 
         return institution
 
@@ -261,8 +256,6 @@ class InstitutionCleaner:
             return []
 
         # 2. 查找父子关系并合并
-        # 构建机构的小写版本映射
-        inst_map = {inst.lower(): inst for inst in cleaned}
         to_remove = set()
 
         for inst in cleaned:
@@ -320,7 +313,7 @@ class InstitutionCleaner:
         """解析WOS文件"""
         logger.info(f"开始解析文件: {input_file}")
 
-        with open(input_file, 'r', encoding='utf-8-sig') as f:
+        with open(input_file, encoding='utf-8-sig') as f:
             content = f.read()
 
         # 提取文件头
@@ -500,7 +493,11 @@ class InstitutionCleaner:
             f.write(f"清洗后机构总数:          {self.stats['total_institutions_after']}\n")
             f.write(f"清洗前唯一机构数:        {self.stats['unique_before']}\n")
             f.write(f"清洗后唯一机构数:        {self.stats['unique_after']}\n")
-            f.write(f"减少比例:                {(1 - self.stats['unique_after']/self.stats['unique_before'])*100:.1f}%\n\n")
+            reduction_pct = (
+                (1 - self.stats['unique_after'] / self.stats['unique_before']) * 100
+                if self.stats['unique_before'] else 0.0
+            )
+            f.write(f"减少比例:                {reduction_pct:.1f}%\n\n")
 
             f.write(f"移除噪音数据:            {self.stats['removed_noise']}\n")
             f.write(f"标准化名称:              {self.stats['standardized']}\n")
@@ -559,7 +556,11 @@ class InstitutionCleaner:
         logger.info(f"清洗后机构总数:          {self.stats['total_institutions_after']}")
         logger.info(f"清洗前唯一机构数:        {self.stats['unique_before']}")
         logger.info(f"清洗后唯一机构数:        {self.stats['unique_after']}")
-        logger.info(f"减少比例:                {(1 - self.stats['unique_after']/self.stats['unique_before'])*100:.1f}%")
+        reduction_pct = (
+            (1 - self.stats['unique_after'] / self.stats['unique_before']) * 100
+            if self.stats['unique_before'] else 0.0
+        )
+        logger.info(f"减少比例:                {reduction_pct:.1f}%")
         logger.info("")
         logger.info(f"移除噪音数据:            {self.stats['removed_noise']}")
         logger.info(f"标准化名称:              {self.stats['standardized']}")
@@ -656,4 +657,5 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     main()

@@ -1,4 +1,3 @@
-import os
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -18,17 +17,12 @@ import os
 import logging
 import re
 import time
-from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 from ..standardizers.wos import WOSStandardizerBatch
 from .scopus import ScopusToWosConverter
 from ..gemini_config import GeminiConfig
+from ..utils.wos_text import split_wos_records
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -51,11 +45,8 @@ class EnhancedConverterBatchV2:
 
         # 创建WOS标准化器（批量并发版，降低并发数避免429错误）
         if enable_standardization:
-            config = GeminiConfig.from_params(
-                api_key=os.getenv('GEMINI_API_KEY'),
-                api_url=os.getenv('GEMINI_API_URL', 'https://your-api-gateway.com/proxy/bibliometrics/v1beta'),
-                model='gemini-2.5-flash-lite'
-            )
+            # API key/URL/model 均取环境变量，默认官方端点
+            config = GeminiConfig()
 
             if not config.validate():
                 raise ValueError("WOS标准化需要有效的 Gemini API 配置，请设置 GEMINI_API_KEY")
@@ -79,7 +70,7 @@ class EnhancedConverterBatchV2:
         if self.enable_standardization:
             logger.info(f"并发线程数: {self.standardizer.max_workers}")
             logger.info(f"批处理大小: {self.standardizer.batch_size}")
-            logger.info(f"标准化范围: 国家名、期刊名（人名使用原有算法）")
+            logger.info("标准化范围: 国家名、期刊名（人名使用原有算法）")
         logger.info("=" * 80)
         logger.info("")
 
@@ -110,7 +101,7 @@ class EnhancedConverterBatchV2:
     def _standardize_wos_file_batch(self):
         """批量标准化WOS文件（只处理国家和期刊）"""
         # 读取转换后的文件
-        with open(self.output_file, 'r', encoding='utf-8-sig') as f:
+        with open(self.output_file, encoding='utf-8-sig') as f:
             content = f.read()
 
         # 解析记录
@@ -138,7 +129,7 @@ class EnhancedConverterBatchV2:
         unique_countries = list(set(all_countries))
         unique_journals = list(set(all_journals))
         logger.info(f"去重后: {len(unique_countries)} 个唯一国家, {len(unique_journals)} 个唯一期刊")
-        logger.info(f"注意: 人名使用原有算法处理，不调用AI")
+        logger.info("注意: 人名使用原有算法处理，不调用AI")
 
         # 第二步：批量标准化（并发）
         logger.info("")
@@ -177,7 +168,7 @@ class EnhancedConverterBatchV2:
         # 写回文件
         self._write_wos_file(records)
 
-        logger.info(f"✓ WOS标准化完成")
+        logger.info("✓ WOS标准化完成")
 
     def _extract_countries_from_c1(self, c1_text: str) -> List[str]:
         """从C1字段提取所有国家名"""
@@ -213,7 +204,7 @@ class EnhancedConverterBatchV2:
     def _parse_wos_file(self, content: str) -> List[Dict[str, str]]:
         """解析WOS文件"""
         records = []
-        record_blocks = content.split('\n\nPT ')[1:]
+        record_blocks = split_wos_records(content)
 
         for block in record_blocks:
             block = 'PT ' + block
@@ -263,8 +254,8 @@ class EnhancedConverterBatchV2:
                               'C1', 'C3', 'RP', 'EM', 'FU', 'FX', 'CR', 'NR', 'TC', 'Z9',
                               'U1', 'U2', 'PU', 'PI', 'PA', 'SN', 'EI', 'BN', 'J9', 'JI',
                               'PD', 'PY', 'VL', 'IS', 'SI', 'PN', 'SU', 'BP', 'EP', 'AR',
-                              'DI', 'D2', 'PG', 'WC', 'SC', 'GA', 'UT', 'PM', 'OA', 'HC',
-                              'HP', 'DA']
+                              'DI', 'D2', 'PG', 'WE', 'WC', 'SC', 'GA', 'UT', 'PM', 'OA',
+                              'HC', 'HP', 'DA']
 
                 for field in field_order:
                     if field in record:
@@ -291,19 +282,19 @@ class EnhancedConverterBatchV2:
         logger.info("=" * 80)
         logger.info("WOS标准化统计")
         logger.info("=" * 80)
-        logger.info(f"国家标准化:")
+        logger.info("国家标准化:")
         logger.info(f"  - 缓存命中: {stats['countries']['hits']}")
         logger.info(f"  - AI处理: {stats['countries']['misses']}")
         logger.info(f"  - 命中率: {stats['countries']['hit_rate']}")
         logger.info("")
-        logger.info(f"期刊标准化:")
+        logger.info("期刊标准化:")
         logger.info(f"  - 缓存命中: {stats['journals']['hits']}")
         logger.info(f"  - AI处理: {stats['journals']['misses']}")
         logger.info(f"  - 命中率: {stats['journals']['hit_rate']}")
         logger.info("")
         logger.info(f"总API调用次数: {stats['api_calls']}")
         logger.info("")
-        logger.info(f"注意: 人名使用原有算法处理，未调用AI")
+        logger.info("注意: 人名使用原有算法处理，未调用AI")
         logger.info("=" * 80)
 
 
@@ -332,4 +323,5 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     main()

@@ -9,6 +9,38 @@
 
 ## [Unreleased] - 2026-03-07
 
+### 🐛 修复（2026-07-09 深度审查批次）
+- **每个文件静默丢失首条记录**（已实测）: `content.split('\n\nPT ')[1:]` 这一解析模式在 WOS 原始导出（header 后无空行）上会把首条记录连同 header 一起丢弃。受影响四处已统一改用容错切分 `utils/wos_text.split_wos_records`：`converters/batch.py`（AI 标准化路径——此前启用 AI 时最终输出永久少第一条文献）、`standardizers/enrichment.py`、`analysis/plot_types.py` 与 `analysis/plot_citations.py`（文档类型图 WoS/Scopus 列各少算 1 条）。实测 `wos.txt` 149→150、`scopus_converted_to_wos.txt` 152→153，与 ER 计数一致。
+- **合并输出静默丢弃 WC/SC/FU 等字段**（已实测）: `pipeline/merge.py` 写出时只保留 39 个白名单字段，WOS 记录的学科类别（WC/SC）、基金（FU/FX）、出版月份（PD）等全部丢失——这些是 CiteSpace/VOSviewer 类别分析的核心字段。现在白名单之外的字段按解析顺序追加保留。实测修复后 WC/SC 150/150、FU/FX 84/84 与源文件逐一对齐，并传递至 `Final_Version.txt`。
+- **机构清洗后缀规则整体失效且有破坏性截断**: `standardizers/institutions.py` 把正则配置（` inc\.?$`、` sa$`）当字面串做 `endswith` 匹配——含转义符的规则永不生效，而 ` sa$` 被剥成 `sa` 会把 "Univ Pisa" 截成 "Univ Pi"。已改为按正则匹配（词边界安全）。实测 Example 中 "Systems Trichology London Ltd" 现在被正确清洗为 "Systems Trichology London"。
+- **合并步骤遇脏 TC 值整体崩溃**（已实测）: `merge_scopus_to_wos` 的 `int(TC)` 对 `'N/A'` 等非数字值抛 `ValueError` 使整个合并失败，现按 0 安全处理。
+- **AI 机构补全系统性跳过大量正常高校**: `enrichment.py` 公司过滤用子串匹配，`'Co' in 'Cornell'` 导致 Cornell/Colorado/Columbia 等被静默跳过、永不补全；已改为词边界正则。另修复两段式地址（"Harvard Univ, USA"）把机构名误当城市传给 AI 的问题。
+- **Gemini 响应解析崩溃引发 12 次无效重试**: `wos.py`/`gemini.py` 对响应做无保护链式取值，遇 MAX_TOKENS/安全拦截时 `KeyError` 被当作可重试错误白重试 12 次；现在识别无文本响应直接跳过重试。
+- **GUI 后台线程越界访问 Tk 变量**: `presentation/_app.py` 的工作线程直接 `.get()` 读取 Tkinter 变量（官方禁止，偶发 `RuntimeError`/卡死）；现在主线程启动前快照全部设置传入线程。
+- 其他：`InstitutionCleaner` 统计除零崩溃；作者数据库空白名 `IndexError`；`GeminiConfig.from_file` 丢弃 max_tokens/temperature/timeout（配置往返不对称）；`__repr__` 泄漏 API key 前 8 位（现仅显示末 4 位）；批处理 field_order 补上 WE 字段。
+
+### ⚡ 性能（2026-07-09 深度审查批次）
+- **跨库查重预计算匹配键**: `pipeline/merge.py` 的 O(N×M) 查重此前每对比较都重跑标题正则标准化；现在预计算每条记录的 DOI/标准化标题/第一作者键（O(N+M) 次），比较退化为纯字符串操作。配对结果与旧算法逐位一致（输出 md5 不变）。
+
+### 🧪 测试（2026-07-09 深度审查批次）
+- 新增 `tests/test_regressions.py`（10 个回归测试），锁定首条记录切分、脏 TC 处理、查重键等价性、公司后缀词边界四类修复。测试总数 19。
+
+### 🐛 修复（2026-07-08 维护批次）
+- **GUI 错误弹窗失效**: 修复 `presentation/_app.py` 中错误处理 lambda 引用已被删除的异常变量导致的 `NameError`——此前工作流失败时用户看不到真实错误信息，只会遇到二次报错。
+- **AI 分支默认端点错误**: 主工作流与批量转换器此前把 `GEMINI_API_URL` 的回退值写成占位假域名（`your-api-gateway.com`），未设置该环境变量时 AI 分支必然连接失败；现统一回退到官方端点 `https://generativelanguage.googleapis.com/v1beta`，并由 `GeminiConfig()` 单点管理默认值（`GEMINI_MODEL` 环境变量随之在所有路径生效）。
+- **隐私清理**: 移除代码中残留的私人 API 代理域名默认值；`config/gemini_config.json` 加入 `.gitignore` 防止明文 API key 误提交。
+- **异常链**: CSV 读取错误重抛时保留原始异常链（`raise ... from`），便于定位根因。
+
+### ⚡ 性能（2026-07-08 维护批次）
+- **Scopus 转换提速约 15–18 倍**: `converters/scopus.py` 中 `_ascii_fold`、`_institution_similarity_tokens`、`_institution_similarity`、`_normalize_lookup_key`、`_tokenize_affiliation` 等纯函数改为模块级 `lru_cache` 缓存，常量词典（同义词、停用词、词组替换）提升为模块常量，不再在数百万次调用中反复重建。Example 数据集 `--no-ai` 全流程从约 1 分钟降至约 4 秒，输出与优化前逐字节一致（md5 校验）。
+- **合并阶段**: `pipeline/merge.py` 的 WOS-Scopus 配对查找由逐对线性扫描改为字典映射。
+
+### 🧰 工程化（2026-07-08 维护批次）
+- **打包与入口**: 新增 `pyproject.toml`（`pip install -e .` 后提供 `bibliometrics` / `bibliometrics-gui` 命令）、`bibliometrics.cli`、`__main__.py`。
+- **Lint**: `pyproject.toml` 配置 ruff（含 bugbear），全仓库 119 个问题清零；模块级 `logging.basicConfig` 副作用移入各模块 `__main__` 调试入口，作为库导入时不再篡改全局日志配置。
+- **CI**: 新增 GitHub Actions 工作流（Python 3.10/3.13 双版本：ruff + unittest + Example 冒烟运行）。
+- **测试**: smoke tests 扩充至 9 个，新增 `GeminiConfig` 默认端点与环境变量回归测试。
+
 ### 🎯 项目定位与文档重写
 - 将当前文档口径统一为：**以 WOS 为主标准的 Scopus→WOS 转换与整合系统**，不再把项目描述为普通数据清洗工具。
 - 重写根目录 `README*`、`QUICK_START*`、`PROJECT_STRUCTURE.md` 与核心中文 docs，明确 WOS 主标准、重复对校准、保守 `C3` 恢复和 `--no-ai` 的真实行为。

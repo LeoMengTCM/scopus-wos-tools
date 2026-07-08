@@ -20,13 +20,9 @@ import re
 import os
 import sys
 import logging
-from typing import List, Dict, Tuple
+from typing import List, Dict
 from collections import Counter
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +51,7 @@ class LanguageFilter:
         """
         logger.info(f"开始解析文件: {self.input_file}")
 
-        with open(self.input_file, 'r', encoding='utf-8-sig') as f:
+        with open(self.input_file, encoding='utf-8-sig') as f:
             content = f.read()
 
         # 提取文件头
@@ -170,7 +166,7 @@ class LanguageFilter:
             # 写入文件尾
             f.write('EF\n')
 
-        logger.info(f"文件写入完成")
+        logger.info("文件写入完成")
 
     def generate_report(self) -> str:
         """
@@ -310,4 +306,5 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     sys.exit(main())

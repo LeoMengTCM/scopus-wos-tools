@@ -1,4 +1,3 @@
-import os
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -21,17 +20,11 @@ import json
 import time
 import logging
 import requests
-from typing import Dict, List, Optional, Set
-from pathlib import Path
+from typing import Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ..gemini_config import GeminiConfig
 from ..utils.paths import resolve_project_path
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -45,7 +38,7 @@ class WOSStandardDatabase:
     def _load_database(self) -> Dict:
         if self.db_path.exists():
             try:
-                with open(self.db_path, 'r', encoding='utf-8') as f:
+                with open(self.db_path, encoding='utf-8') as f:
                     db = json.load(f)
                     logger.info(f"✓ 加载WOS标准数据库: {len(db.get('authors', {}))} 作者, {len(db.get('countries', {}))} 国家, {len(db.get('journals', {}))} 期刊")
                     return db
@@ -71,7 +64,7 @@ class WOSStandardDatabase:
         with open(self.db_path, 'w', encoding='utf-8') as f:
             json.dump(self.db, f, ensure_ascii=False, indent=2)
 
-        logger.info(f"✓ WOS标准数据库已保存")
+        logger.info("✓ WOS标准数据库已保存")
 
     def get_author(self, author_name: str) -> Optional[str]:
         """获取作者WOS标准名称"""
@@ -520,12 +513,18 @@ Output ONLY the numbered list in UPPERCASE, no explanation:"""
 
                 if response.status_code == 200:
                     result = response.json()
-                    if 'candidates' in result and len(result['candidates']) > 0:
-                        text = result['candidates'][0]['content']['parts'][0]['text']
-                        return text.strip()
-                    else:
-                        logger.error(f"响应格式错误或无candidates")
+                    candidates = result.get('candidates') or []
+                    if candidates:
+                        content = candidates[0].get('content') or {}
+                        parts = content.get('parts') or []
+                        if parts and 'text' in parts[0]:
+                            return parts[0]['text'].strip()
+                        # MAX_TOKENS / 安全拦截等情况没有文本，重试结果也相同，直接放弃
+                        finish_reason = candidates[0].get('finishReason', 'UNKNOWN')
+                        logger.error(f"响应无文本内容（finishReason={finish_reason}），跳过重试")
                         return None
+                    logger.error("响应格式错误或无candidates")
+                    return None
 
                 # API返回错误，需要重试
                 retry_count += 1
@@ -619,12 +618,8 @@ Output ONLY the numbered list in UPPERCASE, no explanation:"""
 
 def main():
     """测试批量标准化器"""
-    # 创建配置
-    config = GeminiConfig.from_params(
-        api_key=os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY'),
-        api_url=os.getenv('GEMINI_API_URL', 'https://your-api-gateway.com/proxy/bibliometrics/v1beta'),
-        model='gemini-2.5-flash-lite'
-    )
+    # 创建配置（API key/URL/model 均取环境变量，默认官方端点）
+    config = GeminiConfig()
 
     # 创建批量标准化器（5个并发线程，避免429错误）
     standardizer = WOSStandardizerBatch(config, max_workers=5, batch_size=20)
@@ -692,4 +687,5 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     main()

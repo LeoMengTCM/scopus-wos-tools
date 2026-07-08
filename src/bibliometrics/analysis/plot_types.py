@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from ..utils.paths import find_existing_analysis_file
+from ..utils.wos_text import split_wos_records
 
 
 class DocumentTypeAnalyzer:
@@ -54,10 +55,10 @@ class DocumentTypeAnalyzer:
         """
         counts = {'Article': 0, 'Review': 0}
 
-        with open(file_path, 'r', encoding='utf-8-sig') as f:
+        with open(file_path, encoding='utf-8-sig') as f:
             content = f.read()
 
-        records = content.split('\n\nPT ')[1:]  # 跳过文件头
+        records = split_wos_records(content)  # 兼容头部后有/无空行两种形态
 
         for record in records:
             if record.strip():
@@ -259,7 +260,7 @@ def generate_document_type_analysis(data_dir: str, min_year: int = None, max_yea
     # 生成图表
     print("正在生成图表...")
     analyzer.plot_distribution(data, str(output_dir))
-    print(f"  ✓ 图表文件: document_types.tiff 和 .png")
+    print("  ✓ 图表文件: document_types.tiff 和 .png")
 
     # 复制最终数据文件到 data 文件夹（方便直接使用）
     print("正在复制最终数据文件...")
@@ -282,12 +283,12 @@ def generate_document_type_analysis(data_dir: str, min_year: int = None, max_yea
     print(f"\n图表输出目录: {output_dir}")
     print("\n生成的文件:")
     print(f"  图表文件夹 ({output_dir.name}):")
-    print(f"    - document_types.tiff           - 高清图表（投稿用）")
-    print(f"    - document_types.png            - PNG图表（预览用）")
-    print(f"    - document_types_data.csv       - 统计数据（Excel可读）")
-    print(f"    - plot_document_types.py        - 绘图脚本副本")
+    print("    - document_types.tiff           - 高清图表（投稿用）")
+    print("    - document_types.png            - PNG图表（预览用）")
+    print("    - document_types_data.csv       - 统计数据（Excel可读）")
+    print("    - plot_document_types.py        - 绘图脚本副本")
     print(f"\n  data 文件夹 ({data_dir / 'data'}):")
-    print(f"    - download_final_data.txt       - 🆕 最终数据（可直接用于VOSviewer/CiteSpace）")
+    print("    - download_final_data.txt       - 🆕 最终数据（可直接用于VOSviewer/CiteSpace）")
     print("\n✓ 图表已保存到: {}".format(output_dir))
     print("✓ 分析数据已保存到: {}\n".format(data_dir / 'data' / 'download_final_data.txt'))
 
@@ -338,15 +339,15 @@ def generate_all_figures(data_dir: str, min_year: int = None, max_year: int = No
         data_path = Path(data_dir)
         print("\n✓ 所有图表已生成：")
         print(f"\n  01 文档类型 ({data_path / 'Figures and Tables' / '01 文档类型'}):")
-        print(f"    - document_types.tiff/png")
-        print(f"    - document_types_data.csv")
+        print("    - document_types.tiff/png")
+        print("    - document_types_data.csv")
         print(f"\n  02 各年发文及引文量 ({data_path / 'Figures and Tables' / '02 各年发文及引文量'}):")
-        print(f"    - 各年发文量.tiff/png")
-        print(f"    - 各年引用量.tiff/png")
-        print(f"    - 各年发文量及引用量.tiff/png")
-        print(f"    - publications_citations_data.csv")
+        print("    - 各年发文量.tiff/png")
+        print("    - 各年引用量.tiff/png")
+        print("    - 各年发文量及引用量.tiff/png")
+        print("    - publications_citations_data.csv")
         print(f"\n  data 文件夹 ({data_path / 'data'}):")
-        print(f"    - download_final_data.txt")
+        print("    - download_final_data.txt")
         print()
 
     return success_count == total_count

@@ -1,4 +1,3 @@
-import os
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -22,15 +21,9 @@ import time
 import logging
 import requests
 from typing import Dict, List, Optional
-from pathlib import Path
 from ..gemini_config import GeminiConfig
 from ..utils.paths import resolve_project_path
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -56,7 +49,7 @@ class InstitutionDatabase:
         """加载数据库"""
         if self.db_path.exists():
             try:
-                with open(self.db_path, 'r', encoding='utf-8') as f:
+                with open(self.db_path, encoding='utf-8') as f:
                     db = json.load(f)
                     logger.info(f"✓ 加载了数据库: {len(db.get('institutions', {}))} 个机构")
                     return db
@@ -190,7 +183,7 @@ class GeminiEnricherV2:
         if not config.is_enabled():
             raise ValueError("Gemini API未启用，请检查配置")
 
-        logger.info(f"✓ Gemini增强器v2.0已初始化")
+        logger.info("✓ Gemini增强器v2.0已初始化")
         logger.info(f"  - 模型: {self.model}")
         logger.info(f"  - Max tokens: {config.max_tokens}")
         logger.info(f"  - 重试次数: {config.max_retries}")
@@ -239,7 +232,7 @@ class GeminiEnricherV2:
 
             # 批次间延迟，避免429错误
             if i + batch_size < len(to_enrich):
-                logger.info(f"⏸️  批次间延迟2秒...")
+                logger.info("⏸️  批次间延迟2秒...")
                 time.sleep(2.0)
 
         return results
@@ -490,15 +483,14 @@ Now process the input above and return ONLY the JSON output:"""
                 if response.status_code == 200:
                     result = response.json()
 
-                    # 检查响应结构
-                    if 'candidates' in result and len(result['candidates']) > 0:
-                        candidate = result['candidates'][0]
-                        if 'content' in candidate and 'parts' in candidate['content']:
-                            text = candidate['content']['parts'][0]['text']
-                            return text
-                        else:
-                            logger.error(f"响应格式错误: {result}")
-                            return None
+                    # 检查响应结构（parts 可能为空列表或缺 text，如 MAX_TOKENS/安全拦截）
+                    candidates = result.get('candidates') or []
+                    if candidates:
+                        parts = (candidates[0].get('content') or {}).get('parts') or []
+                        if parts and 'text' in parts[0]:
+                            return parts[0]['text']
+                        logger.error(f"响应格式错误: {result}")
+                        return None
                     else:
                         logger.error(f"响应中没有candidates: {result}")
                         return None
@@ -775,12 +767,8 @@ def main():
 
     args = parser.parse_args()
 
-    # 创建配置
-    config = GeminiConfig.from_params(
-        api_key=os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY'),
-        api_url=os.getenv('GEMINI_API_URL', 'https://your-api-gateway.com/proxy/bibliometrics/v1beta'),
-        model='gemini-2.5-flash-lite'
-    )
+    # 创建配置（API key/URL/model 均取环境变量，默认官方端点）
+    config = GeminiConfig()
 
     # 创建增强器
     enricher = GeminiEnricherV2(config)
@@ -810,4 +798,5 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     main()

@@ -16,16 +16,11 @@
 """
 
 import re
-import sys
 import argparse
 import logging
 from collections import Counter
 from typing import List, Dict, Optional, Tuple
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -65,7 +60,7 @@ class YearFilter:
 
         logger.info(f"开始解析文件: {input_file}")
 
-        with open(input_file, 'r', encoding='utf-8-sig') as f:
+        with open(input_file, encoding='utf-8-sig') as f:
             for line in f:
                 # 文件头
                 if line.startswith('FN ') or line.startswith('VR '):
@@ -177,7 +172,7 @@ class YearFilter:
             # 写入文件尾
             f.write('EF\n')
 
-        logger.info(f"写入完成")
+        logger.info("写入完成")
 
     def generate_report(self, report_file: str):
         """生成过滤报告"""
@@ -364,4 +359,5 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     main()

@@ -1,4 +1,3 @@
-import os
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -18,18 +17,13 @@ import os
 """
 
 import re
-import json
+import os
 import logging
 from typing import Dict, List, Optional, Tuple
-from pathlib import Path
 from ..gemini_config import GeminiConfig
+from ..utils.wos_text import split_wos_records
 from .gemini import GeminiEnricherV2
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -72,8 +66,9 @@ class InstitutionEnricherV2:
         parsed_lines = []
         institutions_to_enrich = []
 
-        # 无效机构关键词（过滤掉公司、Ltd等）
-        invalid_keywords = ['Ltd.', 'Ltd', 'Inc.', 'Inc', 'Co.', 'Co', 'LLC', 'Corp.', 'Corp']
+        # 无效机构关键词（过滤掉公司、Ltd等）——按整词匹配，
+        # 子串匹配会把 Cornell/Colorado/Columbia 等误伤为公司（'Co' in 'Cornell'）
+        company_word_re = re.compile(r'\b(ltd|inc|co|llc|corp)\b\.?', re.IGNORECASE)
 
         for line in lines:
             parsed = self._parse_scopus_c1_line(line)
@@ -82,7 +77,7 @@ class InstitutionEnricherV2:
             if parsed:
                 # 过滤无效机构
                 inst_name = parsed['institution']
-                if any(keyword in inst_name for keyword in invalid_keywords):
+                if company_word_re.search(inst_name):
                     continue  # 跳过公司名称
 
                 inst_tuple = (inst_name, parsed['city'], parsed['country'])
@@ -144,7 +139,8 @@ class InstitutionEnricherV2:
             return None
 
         country = parts[-1]
-        city = parts[-2] if len(parts) >= 2 else None
+        # 两段式地址（"Harvard Univ, USA"）没有城市段，parts[-2] 是机构名本身
+        city = parts[-2] if len(parts) >= 3 else None
         institution = parts[0]
         departments = parts[1:-2] if len(parts) > 2 else []
 
@@ -200,7 +196,7 @@ class InstitutionEnricherV2:
         logger.info(f"开始补全文件: {input_file}")
 
         # 读取文件
-        with open(input_file, 'r', encoding='utf-8-sig') as f:
+        with open(input_file, encoding='utf-8-sig') as f:
             content = f.read()
 
         # 解析记录
@@ -237,7 +233,7 @@ class InstitutionEnricherV2:
     def _parse_wos_file(self, content: str) -> List[Dict[str, str]]:
         """解析WOS文件"""
         records = []
-        record_blocks = content.split('\n\nPT ')[1:]
+        record_blocks = split_wos_records(content)
 
         for block in record_blocks:
             block = 'PT ' + block
@@ -342,7 +338,7 @@ class InstitutionEnricherV2:
         print("💡 提示:")
         if stats['session']['ai_calls'] > 0:
             print(f"  - 本次新增 {stats['session']['ai_calls']} 个机构到数据库")
-            print(f"  - 下次运行这些机构将直接从数据库读取，无需调用AI")
+            print("  - 下次运行这些机构将直接从数据库读取，无需调用AI")
         if stats['session']['db_hits'] > 0:
             print(f"  - 本次从数据库直接获取了 {stats['session']['db_hits']} 个机构信息")
             print(f"  - 节省了 {stats['session']['db_hits']} 次AI调用！")
@@ -394,14 +390,14 @@ def main():
     if args.api_key:
         config = GeminiConfig.from_params(
             api_key=args.api_key,
-            api_url=args.api_url or 'https://gptload.drmeng.top/proxy/bibliometrics/v1beta',
+            api_url=args.api_url or 'https://generativelanguage.googleapis.com/v1beta',
             model=args.model or 'gemini-2.5-flash-lite'
         )
     else:
         # 使用默认配置
         config = GeminiConfig.from_params(
             api_key=os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY'),
-            api_url=os.getenv('GEMINI_API_URL', 'https://your-api-gateway.com/proxy/bibliometrics/v1beta'),
+            api_url=os.getenv('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta'),
             model='gemini-2.5-flash-lite'
         )
 
@@ -425,11 +421,12 @@ def main():
     enricher = InstitutionEnricherV2(config, args.db_path)
 
     # 补全文件
-    stats = enricher.enrich_file(args.input, args.output, args.save_interval)
+    enricher.enrich_file(args.input, args.output, args.save_interval)
 
     # 打印统计
     enricher.print_statistics()
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     main()

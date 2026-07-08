@@ -14,7 +14,7 @@ class AuthorDatabase:
 
     def __init__(self, db_path: str):
         self.db_path = Path(db_path)
-        with open(self.db_path, 'r', encoding='utf-8') as f:
+        with open(self.db_path, encoding='utf-8') as f:
             data = json.load(f)
 
         self.authors: Dict[str, Dict] = data.get('authors', {})
@@ -108,7 +108,7 @@ class AuthorDatabase:
 
     @classmethod
     def _normalize_surname(cls, name: str) -> str:
-        if not name:
+        if not name or not name.strip():
             return ''
         surname = name.split(',', 1)[0] if ',' in name else name.split()[-1]
         surname = cls._ascii_fold(surname)

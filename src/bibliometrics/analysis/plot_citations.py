@@ -15,13 +15,13 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import re
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 from collections import defaultdict
 
 from ..utils.paths import find_existing_analysis_file
+from ..utils.wos_text import split_wos_records
 
 
 class PublicationCitationAnalyzer:
@@ -72,11 +72,11 @@ class PublicationCitationAnalyzer:
         publications = defaultdict(int)
         citations = defaultdict(int)
 
-        with open(file_path, 'r', encoding='utf-8-sig') as f:
+        with open(file_path, encoding='utf-8-sig') as f:
             content = f.read()
 
-        # 按记录分割
-        records = content.split('\n\nPT ')[1:]  # 跳过文件头
+        # 按记录分割（兼容头部后有/无空行两种形态）
+        records = split_wos_records(content)
 
         for record in records:
             if not record.strip():
@@ -207,7 +207,7 @@ class PublicationCitationAnalyzer:
                        format=fmt, facecolor='white', edgecolor='none')
 
         plt.close(fig)
-        print(f"  ✓ 各年发文量图已保存")
+        print("  ✓ 各年发文量图已保存")
 
     def plot_citations(self, data: pd.DataFrame, output_dir: str):
         """
@@ -278,7 +278,7 @@ class PublicationCitationAnalyzer:
                        format=fmt, facecolor='white', edgecolor='none')
 
         plt.close(fig)
-        print(f"  ✓ 各年引用量图已保存")
+        print("  ✓ 各年引用量图已保存")
 
     def plot_combined(self, data: pd.DataFrame, output_dir: str):
         """
@@ -378,7 +378,7 @@ class PublicationCitationAnalyzer:
                        format=fmt, facecolor='white', edgecolor='none')
 
         plt.close(fig)
-        print(f"  ✓ 各年发文量及引用量组合图已保存")
+        print("  ✓ 各年发文量及引用量组合图已保存")
 
 
 def generate_publications_citations_analysis(data_dir: str, final_file: Optional[str] = None):
@@ -446,11 +446,11 @@ def generate_publications_citations_analysis(data_dir: str, final_file: Optional
     print("=" * 80)
     print(f"\n图表输出目录: {output_dir}")
     print("\n生成的文件:")
-    print(f"  - 各年发文量.tiff/png              - 年度发文量图（带趋势线）")
-    print(f"  - 各年引用量.tiff/png              - 年度引用量图（带趋势线）")
-    print(f"  - 各年发文量及引用量.tiff/png      - 组合图（带趋势线）")
-    print(f"  - publications_citations_data.csv  - 统计数据（Excel可读）")
-    print(f"  - plot_publications_citations.py   - 绘图脚本副本")
+    print("  - 各年发文量.tiff/png              - 年度发文量图（带趋势线）")
+    print("  - 各年引用量.tiff/png              - 年度引用量图（带趋势线）")
+    print("  - 各年发文量及引用量.tiff/png      - 组合图（带趋势线）")
+    print("  - publications_citations_data.csv  - 统计数据（Excel可读）")
+    print("  - plot_publications_citations.py   - 绘图脚本副本")
     print("\n✓ 图表已保存到: {}\n".format(output_dir))
 
     return True

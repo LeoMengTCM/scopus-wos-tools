@@ -23,23 +23,157 @@ Scopus CSV to WOS Plain Text Converter
 import csv
 import re
 import os
-import sys
 import json
 import logging
 import unicodedata
 from datetime import datetime
+from functools import lru_cache
 from typing import Dict, List, Optional, Set
-from pathlib import Path
 
 from ..utils.paths import resolve_project_path
 
 # 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
 logger = logging.getLogger(__name__)
+
+
+_ASCII_FOLD_SPECIAL_MAP = str.maketrans({
+    'ı': 'i', 'İ': 'I', 'Ł': 'L', 'ł': 'l', 'Ø': 'O', 'ø': 'o',
+    'Đ': 'D', 'đ': 'd', 'Æ': 'AE', 'æ': 'ae', 'Œ': 'OE', 'œ': 'oe',
+    'ß': 'ss',
+})
+
+
+@lru_cache(maxsize=None)
+def _ascii_fold_text(text: str) -> str:
+    """去除重音等非 ASCII 差异（纯函数，带缓存：同一字符串在全流程中被重复折叠数百万次）。"""
+    folded = text.translate(_ASCII_FOLD_SPECIAL_MAP)
+    return unicodedata.normalize('NFKD', folded).encode('ascii', 'ignore').decode('ascii')
+
+
+_SIMILARITY_STOPWORDS = {'of', 'the', 'and', 'for', 'at', 'in', 'de', 'di', 'da'}
+_SIMILARITY_SYNONYMS = {
+    'univ': 'university',
+    'universidad': 'university',
+    'universidade': 'university',
+    'universitario': 'university',
+    'universita': 'university',
+    'med': 'medical',
+    'medicine': 'medical',
+    'hosp': 'hospital',
+    'ctr': 'center',
+    'centre': 'center',
+    'inst': 'institute',
+    'technol': 'technology',
+    'natl': 'national',
+    'acad': 'academy',
+    'sch': 'school',
+    'coll': 'college',
+    'dept': 'department',
+    'res': 'research',
+    'intl': 'international',
+    'co': 'company',
+    'ltd': 'limited',
+    'federal': 'fed',
+    'pharm': 'pharmacy',
+    'surg': 'surgery',
+    'dermatol': 'dermatology',
+    'biomed': 'biomedical',
+    'innovat': 'innovation',
+    'hlth': 'health',
+    'sci': 'science',
+    'sciences': 'science',
+    'publ': 'public',
+    'clin': 'clinic',
+    'econ': 'economics',
+}
+# 注意：替换按插入顺序依次进行，长词组必须排在其前缀词组之前
+_SIMILARITY_PHRASE_REPLACEMENTS = {
+    'ut southwestern': 'university texas southwestern medical center university texas system',
+    'univ texas southwestern': 'university texas southwestern medical center university texas system',
+    'university texas southwestern': 'university texas southwestern medical center university texas system',
+    'tokyo med univ hosp': 'tokyo medical university hospital tokyo medical university',
+    'tokyo med univ': 'tokyo medical university',
+    'toho univ': 'toho university',
+    'kyorin univ': 'kyorin university',
+    'seoul natl univ': 'seoul national university snu',
+    'texas a&m': 'texasam',
+    'texas a m': 'texasam',
+    'texas a and m': 'texasam',
+    'chinese academy medical sciences': 'chinese academy medical sciences cams',
+    'chinese acad med sci': 'chinese academy medical sciences cams',
+    'peking union medical college': 'peking union medical college pumc',
+    'peking union med coll': 'peking union medical college pumc',
+    'inst dermatol': 'institute dermatology cams',
+    'hosp skin dis': 'hospital skin diseases institute dermatology cams',
+    'chinese acad sci': 'chinese academy sciences cas',
+    'shenzhen inst adv technol': 'shenzhen institute advanced technology cas',
+    'ucl': 'university college london university london',
+    'med univ south carolina': 'medical university south carolina',
+    'cairo univ': 'cairo university egyptian knowledge bank ekb',
+    'kasralainy fac med': 'kasralainy faculty medicine cairo university egyptian knowledge bank ekb',
+    'fudan univ': 'fudan university',
+    'jingan dist cent hosp': 'jingan district central hospital',
+    'shiseido fs innovat ctr': 'shiseido fs innovation center shiseido company limited',
+    'shiseido co ltd': 'shiseido company limited',
+    'mirai technol inst': 'mirai technology institute shiseido company limited',
+    'epi biotech co ltd': 'epi biotech company limited',
+    'new hair plast surg clin': 'new hair plastic surgery clinic',
+    'thammasat univ': 'thammasat university',
+    'mahidol univ': 'mahidol university',
+    'ramathibodi hosp': 'ramathibodi hospital mahidol university',
+    'unesp': 'universidade estadual paulista',
+    'univ hlth sci': 'university health sciences turkey',
+    'publ hosp': 'public hospital',
+}
+
+
+@lru_cache(maxsize=None)
+def _institution_similarity_token_tuple(text: str) -> tuple:
+    """机构名分词（纯函数，带缓存：同一机构名在校准阶段被重复分词数百万次）。"""
+    normalized = _ascii_fold_text(text).lower().replace('&', ' and ')
+    for source, replacement in _SIMILARITY_PHRASE_REPLACEMENTS.items():
+        normalized = normalized.replace(source, replacement)
+    normalized = re.sub(r'[^a-z0-9\s]', ' ', normalized)
+    tokens = []
+    for token in normalized.split():
+        token = _SIMILARITY_SYNONYMS.get(token, token)
+        if token and token not in _SIMILARITY_STOPWORDS:
+            tokens.append(token)
+    return tuple(tokens)
+
+
+@lru_cache(maxsize=None)
+def _institution_similarity_token_set(text: str) -> frozenset:
+    return frozenset(_institution_similarity_token_tuple(text))
+
+
+@lru_cache(maxsize=None)
+def _normalize_lookup_key_text(text: str) -> str:
+    """查找键归一化（纯函数，带缓存）。"""
+    folded = _ascii_fold_text(text).lower().replace('&', ' and ')
+    folded = re.sub(r'[^a-z0-9\s]', ' ', folded)
+    return re.sub(r'\s+', ' ', folded).strip()
+
+
+_AFFILIATION_TOKEN_STOPWORDS = frozenset({
+    'of', 'the', 'and', 'for', 'in', 'at', 'on', 'dept', 'department', 'univ', 'university', 'inst',
+    'institute', 'school', 'faculty', 'division', 'center', 'centre', 'hospital', 'clinic', 'medical',
+    'medicine', 'research', 'innovation', 'national', 'college', 'laboratory', 'lab', 'dermatology',
+    'dermatol', 'pathology', 'pathol', 'surgery', 'surgical', 'internal', 'pediatrics', 'pediatric',
+    'specialities', 'specialties', 'cutaneous', 'program', 'programme', 'service', 'section', 'unit',
+    'united', 'states', 'peoples', 'china', 'japan', 'thailand', 'spain', 'canada', 'mexico', 'egypt',
+    'iran', 'england', 'korea', 'south', 'north', 'r', 'province'
+})
+
+
+@lru_cache(maxsize=None)
+def _tokenize_affiliation_text(text: str) -> frozenset:
+    """机构地址分词（纯函数，带缓存）。"""
+    normalized = _normalize_lookup_key_text(text)
+    return frozenset(
+        token for token in normalized.split()
+        if len(token) > 1 and token not in _AFFILIATION_TOKEN_STOPWORDS
+    )
 
 
 class ScopusToWosConverter:
@@ -138,12 +272,12 @@ class ScopusToWosConverter:
 
         # 检查文件是否可读
         try:
-            with open(csv_file, 'r', encoding='utf-8-sig') as f:
+            with open(csv_file, encoding='utf-8-sig') as f:
                 f.read(1)
-        except PermissionError:
-            raise PermissionError(f"无权限读取文件: {csv_file}")
-        except UnicodeDecodeError:
-            raise ValueError(f"文件编码错误，请确保文件为UTF-8格式: {csv_file}")
+        except PermissionError as exc:
+            raise PermissionError(f"无权限读取文件: {csv_file}") from exc
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"文件编码错误，请确保文件为UTF-8格式: {csv_file}") from exc
 
         self.csv_file = csv_file
         self.output_file = output_file
@@ -200,7 +334,7 @@ class ScopusToWosConverter:
 
         if os.path.exists(config_file):
             try:
-                with open(config_file, 'r', encoding='utf-8') as f:
+                with open(config_file, encoding='utf-8') as f:
                     custom_abbrev = json.load(f)
                     logger.info(f"从配置文件加载了 {len(custom_abbrev)} 个期刊缩写")
                     # 合并配置（自定义配置优先）
@@ -263,7 +397,7 @@ class ScopusToWosConverter:
 
         if os.path.exists(config_file):
             try:
-                with open(config_file, 'r', encoding='utf-8') as f:
+                with open(config_file, encoding='utf-8') as f:
                     custom_config = json.load(f)
                     logger.info("成功加载机构配置文件")
                     # 合并配置
@@ -293,7 +427,7 @@ class ScopusToWosConverter:
         """
         records = []
         try:
-            with open(self.csv_file, 'r', encoding='utf-8-sig') as f:
+            with open(self.csv_file, encoding='utf-8-sig') as f:
                 reader = csv.DictReader(f)
 
                 # 验证必要字段
@@ -303,7 +437,7 @@ class ScopusToWosConverter:
                     if missing_fields:
                         logger.warning(f"CSV文件缺少推荐字段: {missing_fields}")
 
-                for row_num, row in enumerate(reader, start=2):  # 从第2行开始（第1行是表头）
+                for row in reader:
                     if any(row.values()):  # 跳过空行
                         records.append(row)
 
@@ -315,10 +449,10 @@ class ScopusToWosConverter:
             raise
         except UnicodeDecodeError as e:
             logger.error(f"文件编码错误: {e}")
-            raise ValueError("文件编码错误，请确保文件为UTF-8格式")
+            raise ValueError("文件编码错误，请确保文件为UTF-8格式") from e
         except csv.Error as e:
             logger.error(f"CSV格式错误: {e}")
-            raise ValueError(f"CSV格式错误: {e}")
+            raise ValueError(f"CSV格式错误: {e}") from e
         except Exception as e:
             logger.error(f"读取文件时发生未知错误: {e}")
             raise
@@ -593,22 +727,12 @@ class ScopusToWosConverter:
         """去除重音等非 ASCII 差异，使作者缩写更贴近 WOS。"""
         if not text:
             return ''
-
-        special_map = str.maketrans({
-            'ı': 'i', 'İ': 'I', 'Ł': 'L', 'ł': 'l', 'Ø': 'O', 'ø': 'o',
-            'Đ': 'D', 'đ': 'd', 'Æ': 'AE', 'æ': 'ae', 'Œ': 'OE', 'œ': 'oe',
-            'ß': 'ss',
-        })
-        text = text.translate(special_map)
-        return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+        return _ascii_fold_text(text)
 
     def _normalize_lookup_key(self, text: str) -> str:
         if not text:
             return ''
-        text = self._ascii_fold(text).lower().replace('&', ' and ')
-        text = re.sub(r'[^a-z0-9\s]', ' ', text)
-        text = re.sub(r'\s+', ' ', text).strip()
-        return text
+        return _normalize_lookup_key_text(text)
 
     def _normalize_person_lookup_key(self, text: str) -> str:
         if not text:
@@ -1406,96 +1530,11 @@ class ScopusToWosConverter:
     def _institution_similarity_tokens(self, text: str) -> List[str]:
         if not text:
             return []
-
-        stopwords = {'of', 'the', 'and', 'for', 'at', 'in', 'de', 'di', 'da'}
-        synonyms = {
-            'univ': 'university',
-            'universidad': 'university',
-            'universidade': 'university',
-            'universitario': 'university',
-            'universita': 'university',
-            'med': 'medical',
-            'medicine': 'medical',
-            'hosp': 'hospital',
-            'ctr': 'center',
-            'centre': 'center',
-            'inst': 'institute',
-            'technol': 'technology',
-            'natl': 'national',
-            'acad': 'academy',
-            'sch': 'school',
-            'coll': 'college',
-            'dept': 'department',
-            'res': 'research',
-            'intl': 'international',
-            'co': 'company',
-            'ltd': 'limited',
-            'federal': 'fed',
-            'pharm': 'pharmacy',
-            'surg': 'surgery',
-            'dermatol': 'dermatology',
-            'biomed': 'biomedical',
-            'innovat': 'innovation',
-            'hlth': 'health',
-            'sci': 'science',
-            'sciences': 'science',
-            'publ': 'public',
-            'clin': 'clinic',
-            'econ': 'economics',
-        }
-        phrase_replacements = {
-            'ut southwestern': 'university texas southwestern medical center university texas system',
-            'univ texas southwestern': 'university texas southwestern medical center university texas system',
-            'university texas southwestern': 'university texas southwestern medical center university texas system',
-            'tokyo med univ hosp': 'tokyo medical university hospital tokyo medical university',
-            'tokyo med univ': 'tokyo medical university',
-            'toho univ': 'toho university',
-            'kyorin univ': 'kyorin university',
-            'seoul natl univ': 'seoul national university snu',
-            'texas a&m': 'texasam',
-            'texas a m': 'texasam',
-            'texas a and m': 'texasam',
-            'chinese academy medical sciences': 'chinese academy medical sciences cams',
-            'chinese acad med sci': 'chinese academy medical sciences cams',
-            'peking union medical college': 'peking union medical college pumc',
-            'peking union med coll': 'peking union medical college pumc',
-            'inst dermatol': 'institute dermatology cams',
-            'hosp skin dis': 'hospital skin diseases institute dermatology cams',
-            'chinese acad sci': 'chinese academy sciences cas',
-            'shenzhen inst adv technol': 'shenzhen institute advanced technology cas',
-            'ucl': 'university college london university london',
-            'med univ south carolina': 'medical university south carolina',
-            'cairo univ': 'cairo university egyptian knowledge bank ekb',
-            'kasralainy fac med': 'kasralainy faculty medicine cairo university egyptian knowledge bank ekb',
-            'fudan univ': 'fudan university',
-            'jingan dist cent hosp': 'jingan district central hospital',
-            'shiseido fs innovat ctr': 'shiseido fs innovation center shiseido company limited',
-            'shiseido co ltd': 'shiseido company limited',
-            'mirai technol inst': 'mirai technology institute shiseido company limited',
-            'epi biotech co ltd': 'epi biotech company limited',
-            'new hair plast surg clin': 'new hair plastic surgery clinic',
-            'thammasat univ': 'thammasat university',
-            'mahidol univ': 'mahidol university',
-            'ramathibodi hosp': 'ramathibodi hospital mahidol university',
-            'unesp': 'universidade estadual paulista',
-            'univ hlth sci': 'university health sciences turkey',
-            'publ hosp': 'public hospital',
-        }
-
-        normalized = self._ascii_fold(text).lower().replace('&', ' and ')
-        for source, replacement in phrase_replacements.items():
-            normalized = normalized.replace(source, replacement)
-        normalized = re.sub(r'[^a-z0-9\s]', ' ', normalized)
-        tokens = []
-        for token in normalized.split():
-            token = synonyms.get(token, token)
-            if token and token not in stopwords:
-                tokens.append(token)
-        return tokens
+        return list(_institution_similarity_token_tuple(text))
 
     def _institution_similarity(self, left: str, right: str) -> float:
-        left_tokens = set(self._institution_similarity_tokens(left))
-        right_tokens = set(self._institution_similarity_tokens(right))
+        left_tokens = _institution_similarity_token_set(left) if left else frozenset()
+        right_tokens = _institution_similarity_token_set(right) if right else frozenset()
 
         if not left_tokens or not right_tokens:
             return 0.0
@@ -2409,24 +2448,14 @@ class ScopusToWosConverter:
 
 
     def _tokenize_affiliation(self, text: str) -> Set[str]:
-        stopwords = {
-            'of', 'the', 'and', 'for', 'in', 'at', 'on', 'dept', 'department', 'univ', 'university', 'inst',
-            'institute', 'school', 'faculty', 'division', 'center', 'centre', 'hospital', 'clinic', 'medical',
-            'medicine', 'research', 'innovation', 'national', 'college', 'laboratory', 'lab', 'dermatology',
-            'dermatol', 'pathology', 'pathol', 'surgery', 'surgical', 'internal', 'pediatrics', 'pediatric',
-            'specialities', 'specialties', 'cutaneous', 'program', 'programme', 'service', 'section', 'unit',
-            'united', 'states', 'peoples', 'china', 'japan', 'thailand', 'spain', 'canada', 'mexico', 'egypt',
-            'iran', 'england', 'korea', 'south', 'north', 'r', 'province'
-        }
-        normalized = self._normalize_lookup_key(text)
-        return {token for token in normalized.split() if len(token) > 1 and token not in stopwords}
+        return _tokenize_affiliation_text(text)
 
     def _align_reference_affiliations(self, scopus_affiliations: List[str], wos_addresses: List[str]) -> List[tuple[str, str]]:
         if not scopus_affiliations or not wos_addresses:
             return []
 
         if len(scopus_affiliations) == len(wos_addresses):
-            return list(zip(scopus_affiliations, wos_addresses))
+            return list(zip(scopus_affiliations, wos_addresses, strict=True))
 
         remaining = set(range(len(wos_addresses)))
         matches = []
@@ -4704,7 +4733,7 @@ class ScopusToWosConverter:
             with open(self.output_file, 'w', encoding='utf-8-sig') as f:
                 f.write('\n'.join(wos_content))
             logger.info("="*60)
-            logger.info(f"转换完成！")
+            logger.info("转换完成！")
             logger.info(f"输出文件: {self.output_file}")
             logger.info(f"共转换 {len(self.records)} 条记录")
             logger.info("="*60)
@@ -4718,7 +4747,6 @@ class ScopusToWosConverter:
 
 def main():
     """主函数"""
-    import sys
     import argparse
 
     # 命令行参数解析
@@ -4774,4 +4802,5 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     main()

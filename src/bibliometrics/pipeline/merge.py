@@ -24,16 +24,30 @@ import re
 import os
 import logging
 import unicodedata
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Tuple
 from collections import defaultdict
 
 # 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
 logger = logging.getLogger(__name__)
+
+
+def _safe_int(value, default: int = 0) -> int:
+    """把 TC/Z9 之类的计数字段安全转为 int，脏数据（'N/A'、空、None）返回默认值。"""
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _append_field_lines(lines: List[str], field: str, value: str) -> None:
+    """按 WOS 纯文本格式追加一个字段（多行值以三空格缩进续行）。"""
+    if '\n' in value:
+        value_lines = value.split('\n')
+        lines.append(f"{field} {value_lines[0]}")
+        for line in value_lines[1:]:
+            lines.append(f"   {line}")
+    else:
+        lines.append(f"{field} {value}")
 
 
 class WOSRecordParser:
@@ -47,7 +61,7 @@ class WOSRecordParser:
         Returns:
             List[Dict]: 记录列表，每条记录是一个字典
         """
-        with open(file_path, 'r', encoding='utf-8-sig') as f:
+        with open(file_path, encoding='utf-8-sig') as f:
             content = f.read()
 
         # 按ER分割记录（ER是记录结束标记）
@@ -142,24 +156,28 @@ class RecordMatcher:
         return ''
 
     @staticmethod
-    def is_duplicate(record1: Dict, record2: Dict) -> bool:
-        """
-        判断两条记录是否重复
+    def precompute_match_keys(record: Dict) -> Dict:
+        """预计算匹配键（DOI/标准化标题/年份/第一作者）。
 
-        策略：
-        1. DOI匹配（最准确）
-        2. 标题 + 年份 + 第一作者
+        双库查重是 O(N×M) 对比较，把每条记录的正则标准化提前到 O(N+M)，
+        比较本身退化为纯字符串操作。
         """
+        return {
+            'doi': record.get('DI', '').strip().lower(),
+            'title': RecordMatcher.normalize_title(record.get('TI', '')),
+            'year': record.get('PY', ''),
+            'first_author': RecordMatcher.get_first_author(record),
+        }
+
+    @staticmethod
+    def match_keys_duplicate(keys1: Dict, keys2: Dict) -> bool:
+        """基于预计算键的重复判定（与 is_duplicate 的判定逻辑完全一致）。"""
         # 策略1：DOI匹配
-        doi1 = record1.get('DI', '').strip().lower()
-        doi2 = record2.get('DI', '').strip().lower()
-        if doi1 and doi2 and doi1 == doi2:
+        if keys1['doi'] and keys2['doi'] and keys1['doi'] == keys2['doi']:
             return True
 
         # 策略2：标题 + 年份 + 第一作者
-        title1 = RecordMatcher.normalize_title(record1.get('TI', ''))
-        title2 = RecordMatcher.normalize_title(record2.get('TI', ''))
-
+        title1, title2 = keys1['title'], keys2['title']
         if not title1 or not title2:
             return False
 
@@ -169,25 +187,33 @@ class RecordMatcher:
             (len(title1) > 20 and len(title2) > 20 and
              (title1 in title2 or title2 in title1))
         )
-
         if not title_similar:
             return False
 
         # 年份匹配
-        year1 = record1.get('PY', '')
-        year2 = record2.get('PY', '')
-        if year1 != year2:
+        if keys1['year'] != keys2['year']:
             return False
 
         # 第一作者匹配（如果有）
-        author1 = RecordMatcher.get_first_author(record1)
-        author2 = RecordMatcher.get_first_author(record2)
-
+        author1, author2 = keys1['first_author'], keys2['first_author']
         if author1 and author2:
             return author1 == author2
-        else:
-            # 没有作者信息，仅凭标题+年份判断
-            return True
+        # 没有作者信息，仅凭标题+年份判断
+        return True
+
+    @staticmethod
+    def is_duplicate(record1: Dict, record2: Dict) -> bool:
+        """
+        判断两条记录是否重复
+
+        策略：
+        1. DOI匹配（最准确）
+        2. 标题 + 年份 + 第一作者
+        """
+        return RecordMatcher.match_keys_duplicate(
+            RecordMatcher.precompute_match_keys(record1),
+            RecordMatcher.precompute_match_keys(record2),
+        )
 
 
 class WOSStandardExtractor:
@@ -386,7 +412,7 @@ class WOSStandardExtractor:
                             mapped['AU'] = abbreviated_authors[index]
                         self.author_full_names[full_name_key] = mapped
 
-        logger.info(f"✓ 提取完成：")
+        logger.info("✓ 提取完成：")
         logger.info(f"  - 机构: {len(self.institutions)} 个")
         logger.info(f"  - 期刊: {len(self.journals)} 个")
         logger.info(f"  - 国家: {len(self.countries)} 个")
@@ -394,7 +420,7 @@ class WOSStandardExtractor:
 
         # 显示提取到的国家列表（前20个）
         if self.countries:
-            logger.info(f"  提取到的国家（前20个）:")
+            logger.info("  提取到的国家（前20个）:")
             for i, country in enumerate(sorted(self.countries.values())[:20], 1):
                 logger.info(f"    {i}. {country}")
             if len(self.countries) > 20:
@@ -531,9 +557,9 @@ class RecordMerger:
         """
         merged = wos_record.copy()
 
-        # 1. TC（被引次数）：取最大值
-        tc_wos = int(wos_record.get('TC', '0') or '0')
-        tc_scopus = int(scopus_record.get('TC', '0') or '0')
+        # 1. TC（被引次数）：取最大值（脏数据如 'N/A' 按 0 处理，不让合并整体失败）
+        tc_wos = _safe_int(wos_record.get('TC'))
+        tc_scopus = _safe_int(scopus_record.get('TC'))
         if tc_scopus > tc_wos:
             merged['TC'] = str(tc_scopus)
             merged['Z9'] = str(tc_scopus)
@@ -678,12 +704,18 @@ class MergeDeduplicateTool:
         pairs = []
         scopus_matched = set()  # 已匹配的Scopus索引
 
+        # 预计算两侧匹配键：把正则标准化从 O(N×M) 次降到 O(N+M) 次，
+        # 比较顺序与判定逻辑同旧实现完全一致，配对结果不变
+        wos_keys = [self.matcher.precompute_match_keys(r) for r in self.wos_records]
+        scopus_keys = [self.matcher.precompute_match_keys(r) for r in self.scopus_records]
+
         for wos_idx, wos_record in enumerate(self.wos_records):
-            for scopus_idx, scopus_record in enumerate(self.scopus_records):
+            wos_key = wos_keys[wos_idx]
+            for scopus_idx in range(len(self.scopus_records)):
                 if scopus_idx in scopus_matched:
                     continue
 
-                if self.matcher.is_duplicate(wos_record, scopus_record):
+                if self.matcher.match_keys_duplicate(wos_key, scopus_keys[scopus_idx]):
                     pairs.append((wos_idx, scopus_idx))
                     scopus_matched.add(scopus_idx)
 
@@ -708,15 +740,14 @@ class MergeDeduplicateTool:
         2. 添加Scopus独有记录，并对齐WOS标准格式
         """
         scopus_used = set(scopus_idx for _, scopus_idx in wos_scopus_pairs)
+        # 每个 WOS 索引最多对应一个 Scopus 记录（查重时即 break），用映射避免逐对线性扫描
+        scopus_by_wos = dict(wos_scopus_pairs)
 
         # 1. 处理WOS记录（合并Scopus信息）
         for wos_idx, wos_record in enumerate(self.wos_records):
             # 查找对应的Scopus记录
-            scopus_record = None
-            for wos_i, scopus_i in wos_scopus_pairs:
-                if wos_i == wos_idx:
-                    scopus_record = self.scopus_records[scopus_i]
-                    break
+            scopus_i = scopus_by_wos.get(wos_idx)
+            scopus_record = self.scopus_records[scopus_i] if scopus_i is not None else None
 
             if scopus_record:
                 # 合并（以WOS为准）
@@ -767,16 +798,14 @@ class MergeDeduplicateTool:
 
             for field in field_order:
                 if field in record_clean and field != 'PT':
-                    value = record_clean[field]
-                    if '\n' in value:
-                        # 多行字段
-                        value_lines = value.split('\n')
-                        lines.append(f"{field} {value_lines[0]}")
-                        for line in value_lines[1:]:
-                            lines.append(f"   {line}")
-                    else:
-                        # 单行字段
-                        lines.append(f"{field} {value}")
+                    _append_field_lines(lines, field, record_clean[field])
+
+            # 白名单之外的字段按解析顺序追加保留（WC/SC/FU/FX/PD 等），
+            # 避免相对原始 WOS 数据静默丢字段——WC/SC 是类别与领域分析的核心字段
+            known_fields = set(field_order)
+            for field, value in record_clean.items():
+                if field != 'PT' and field not in known_fields:
+                    _append_field_lines(lines, field, value)
 
             # ER - End of Record
             lines.append("ER")
@@ -829,12 +858,12 @@ class MergeDeduplicateTool:
         logger.info("=" * 60)
         logger.info(f"WOS原始记录数:          {self.stats['wos_count']} 条")
         logger.info(f"Scopus原始记录数:       {self.stats['scopus_count']} 条")
-        logger.info(f"")
+        logger.info("")
         logger.info(f"WOS-Scopus重复记录:     {self.stats['scopus_duplicates']} 条（已从Scopus删除）")
         logger.info(f"Scopus独有记录:         {self.stats['scopus_unique']} 条（已保留）")
         logger.info(f"  ⭐ Scopus独有记录标准化: {self.stats['standardized_count']} 条")
-        logger.info(f"     （机构、期刊、国家、作者已对齐WOS格式）")
-        logger.info(f"")
+        logger.info("     （机构、期刊、国家、作者已对齐WOS格式）")
+        logger.info("")
         logger.info(f"最终记录数:             {self.stats['final_count']} 条")
         logger.info(f"  = WOS记录（含补充）:  {self.stats['wos_count']} 条")
         logger.info(f"  + Scopus独有:         {self.stats['scopus_unique']} 条")
@@ -902,7 +931,7 @@ class MergeDeduplicateTool:
             f.write(f"WOS-Scopus重复记录:     {self.stats['scopus_duplicates']} 条\n")
             f.write(f"Scopus独有记录:         {self.stats['scopus_unique']} 条\n")
             f.write(f"  ⭐ Scopus独有记录标准化: {self.stats['standardized_count']} 条\n")
-            f.write(f"     （机构、期刊、国家、作者已对齐WOS格式）\n\n")
+            f.write("     （机构、期刊、国家、作者已对齐WOS格式）\n\n")
 
             f.write(f"最终记录数:             {self.stats['final_count']} 条\n\n")
 
@@ -958,7 +987,6 @@ class MergeDeduplicateTool:
 
 def main():
     """主函数"""
-    import sys
     import argparse
 
     # 命令行参数解析
@@ -996,4 +1024,5 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     main()

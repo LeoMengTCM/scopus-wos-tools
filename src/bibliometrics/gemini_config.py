@@ -12,7 +12,6 @@ Gemini API配置模块
 import os
 import json
 import logging
-from pathlib import Path
 from typing import Optional
 
 from .utils.paths import resolve_project_path
@@ -46,7 +45,7 @@ class GeminiConfig:
         """
         # 优先使用传入的参数，其次使用环境变量，最后使用默认值
         self.api_key = api_key or os.getenv('GEMINI_API_KEY')
-        self.api_url = api_url or os.getenv('GEMINI_API_URL', 'https://gptload.drmeng.top/proxy/bibliometrics/v1beta')
+        self.api_url = api_url or os.getenv('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta')
         self.model = model or os.getenv('GEMINI_MODEL', 'gemini-2.5-flash-lite')
 
         # API配置
@@ -89,14 +88,26 @@ class GeminiConfig:
             return cls()
 
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, encoding='utf-8') as f:
                 config_data = json.load(f)
 
-            return cls(
+            config = cls(
                 api_key=config_data.get('api_key'),
                 api_url=config_data.get('api_url'),
                 model=config_data.get('model')
             )
+            # save_to_file 会写出这些字段，读取时也应生效（否则配置往返不对称）
+            if 'max_tokens' in config_data:
+                config.max_tokens = int(config_data['max_tokens'])
+            if 'temperature' in config_data:
+                config.temperature = float(config_data['temperature'])
+            if 'timeout' in config_data:
+                config.timeout = int(config_data['timeout'])
+            if 'enable_caching' in config_data:
+                config.enable_caching = bool(config_data['enable_caching'])
+            if 'fallback_to_rules' in config_data:
+                config.fallback_to_rules = bool(config_data['fallback_to_rules'])
+            return config
         except Exception as e:
             logger.error(f"加载配置文件失败: {e}")
             return cls()
@@ -163,8 +174,8 @@ class GeminiConfig:
         return True
 
     def __repr__(self) -> str:
-        """字符串表示（隐藏API密钥）"""
-        masked_key = f"{self.api_key[:8]}...{self.api_key[-4:]}" if self.api_key else "未配置"
+        """字符串表示（隐藏API密钥，只显示末4位）"""
+        masked_key = f"...{self.api_key[-4:]}" if self.api_key and len(self.api_key) > 8 else ("已配置" if self.api_key else "未配置")
         return (
             f"GeminiConfig(\n"
             f"  api_key={masked_key},\n"
@@ -187,7 +198,7 @@ def create_default_config_file():
     default_config = {
         'api_key': 'YOUR_API_KEY_HERE',
         'api_url': 'https://generativelanguage.googleapis.com/v1beta',
-        'model': 'gemini-2.0-flash-exp',
+        'model': 'gemini-2.5-flash-lite',
         'max_tokens': 1000,
         'temperature': 0.1,
         'timeout': 30,
@@ -199,7 +210,7 @@ def create_default_config_file():
         json.dump(default_config, f, ensure_ascii=False, indent=2)
 
     print(f"✓ 已创建配置文件模板: {config_path}")
-    print(f"  请编辑该文件，填入你的API密钥")
+    print("  请编辑该文件，填入你的API密钥")
 
 
 if __name__ == '__main__':
@@ -212,7 +223,7 @@ if __name__ == '__main__':
     # 创建配置
     config = GeminiConfig.from_params(
         api_key=os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY'),
-        api_url=os.getenv('GEMINI_API_URL', 'https://your-api-gateway.com/proxy/bibliometrics/v1beta'),
+        api_url=os.getenv('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta'),
         model='gemini-2.5-flash-lite'
     )
 
