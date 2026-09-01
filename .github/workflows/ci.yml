@@ -23,7 +23,7 @@ jobs:
           pip install ruff
       - name: Lint
         run: ruff check src/ scripts/ tests/ run_ai_workflow.py gui_app.py
-      - name: Tests
+      - name: Tests (incl. golden output regression)
         run: python -m unittest discover tests -v
       - name: Smoke run (no AI)
         run: python run_ai_workflow.py --data-dir Example --no-ai
