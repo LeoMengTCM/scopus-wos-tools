@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3](https://img.shields.io/badge/python-3-blue.svg)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-5.1.0%2Blocal-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-5.2.0-green.svg)](CHANGELOG.md)
 
 一个**以 WOS 为主标准的 Scopus→WOS 转换与整合系统**，用于把 WOS 与 Scopus 整理为统一、可直接用于文献计量分析的最终数据库。
 

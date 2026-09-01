@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3](https://img.shields.io/badge/python-3-blue.svg)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-5.1.0%2Blocal-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-5.2.0-green.svg)](CHANGELOG.md)
 
 **WOS を主標準にした Scopus→WOS 変換・統合システム**です。Scopus をできるだけ **Web of Science (WOS)** 風に寄せ、WOS と Scopus を 1 つの解析用コーパスへ統合します。
 

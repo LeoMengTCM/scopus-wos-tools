@@ -4,7 +4,7 @@ English | [中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3](https://img.shields.io/badge/python-3-blue.svg)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-5.1.0%2Blocal-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-5.2.0-green.svg)](CHANGELOG.md)
 
 A **WOS-guided Scopus→WOS conversion and consolidation system** for bibliometric analysis.
 

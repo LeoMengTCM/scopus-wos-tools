@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -40,8 +41,12 @@ class CompatibilityTests(unittest.TestCase):
         workflow = AIWorkflow(data_dir="Example", enable_ai=False, enable_plot=False)
         self.assertEqual(workflow.language, "English")
 
-    def test_version_exposed(self) -> None:
-        self.assertEqual(__version__, "5.1.0")
+    def test_version_matches_pyproject(self) -> None:
+        """`__version__` 与 pyproject.toml 必须同步——发版时最容易漏改其中一处。"""
+        pyproject = (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        declared = re.search(r'^version = "([^"]+)"', pyproject, re.M)
+        self.assertIsNotNone(declared, "pyproject.toml 中未找到 version 字段")
+        self.assertEqual(__version__, declared.group(1))
 
 
 if __name__ == "__main__":

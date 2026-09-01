@@ -7,9 +7,25 @@
 
 ---
 
-## [Unreleased] - 2026-03-07
+## [5.2.0] - 2026-09-01
 
-> 2026-07-08/09 的两个批次由 Anthropic 最先进的 **Claude Fable 5**（Mythos 级模型，经 Claude Code）完成：多智能体并行深度审查、bug 实测复现验证、md5 逐字节输出对比，全程零回归。
+### ♻️ 重构
+- **拆分 4806 行的 `converters/scopus.py`**: `ScopusToWosConverter` 此前是一个 4806 行、136 个方法的单一类，占全部源码的 37%。AST 依赖分析显示其中 101 个方法（2924 行）完全不引用实例属性——本质是纯函数，只是被绑在类上。已按领域拆出 6 个模块：`_normalization.py`（文本归一化原语）、`_authors.py`（作者姓名）、`_c3_names.py`（C3 机构名分类判定）、`_correspondence.py`（通讯作者识别）、`_references.py`（参考文献）、`_fields.py`（国家/机构名/页码/ISSN 规范化）。`scopus.py` 降至 3669 行（-23.7%），类方法数 136 → 83，保留的是真正依赖实例状态的部分：配置加载、WOS 语料校准、各类 `reference_*` 映射的构建与查询、记录级转换编排。
+- **消除中间委托层**: 搬迁后先以薄委托方法保持内部调用不变，验证通过再用 AST 校验"纯位置转发"逐个内联，223 处调用点改为直接调用模块函数，删除 47 个空壳方法。调用点现在能直接看出规则来自哪个领域模块。
+- **顺带清理**: 删除死函数 `match_correspondence_author`（单数版包装，拆分前就无调用者）；修复 `fix_compound_lastname` 中因 `self.logger` 从未赋值而永不执行的 debug 日志（改用模块级 logger）。
+- 每一步搬迁后均运行 golden 输出回归，全部 10 个产物逐字节不变；`ruff` 零告警；`Example --no-ai` 全流程实测 4 秒跑通。
+- **发版校验**: `test_smoke.py` 此前硬编码断言 `__version__ == "5.1.0"`，每次发版都要手工同步；现改为直接与 `pyproject.toml` 中声明的版本比对，防止两处版本号漏改其一。
+- **仓库清理**: 删除 `build/`（`python -m build` 的一次性产物，内容是 `src/` 的旧副本，搜索代码时会命中两份）与 `.mypy_cache/`（82 MB，项目并未配置 mypy）。两者均未纳入版本控制。
+
+### 🧪 测试
+- **新增输出回归网（golden file）**: `tests/test_golden_output.py` 在临时目录跑一遍 `Example --no-ai` 全流程，与 `tests/golden/expected.json` 比对全部 10 个产物。基线为每个 WOS 风格产物记录 sha256 + 记录条数 + 每个字段标签的出现记录数；报告类产物则规范化掉数据目录路径与运行耗时后再取哈希。此前"输出零回归"依赖人工 md5 比对，现在由 CI 自动断言。
+- **基线的定位能力**: 哈希发现"变了"，字段计数指出"变在哪"。实测把 `pipeline/merge.py` 的字段保留逻辑改回旧版 bug 形态后，测试直接列出 `WC: 150 -> 0`、`SC: 150 -> 0`、`FU/FX: 84 -> 0` 等 17 个字段的丢失——正是 2026-07-09 批次修复的那个 bug 的形态。
+- **基线维护**: 新增 `scripts/update_golden.py`，先打印与现有基线的差异并拒绝写入，确认符合预期后加 `--yes` 生效，避免回归被顺手"更新掉"。
+- 确定性前提已验证：`--no-ai` 路径的输出与运行目录无关、与 `PYTHONHASHSEED` 无关（AI 分支因存在 `list(set(...))` 顺序依赖，暂不纳入基线）。测试总数 19 → 23。
+
+---
+
+> 以下为 2026-07-08/09 的两个批次，由 Anthropic 最先进的 **Claude Fable 5**（Mythos 级模型，经 Claude Code）完成：多智能体并行深度审查、bug 实测复现验证、md5 逐字节输出对比，全程零回归。
 
 ### 🐛 修复（2026-07-09 深度审查批次）
 - **每个文件静默丢失首条记录**（已实测）: `content.split('\n\nPT ')[1:]` 这一解析模式在 WOS 原始导出（header 后无空行）上会把首条记录连同 header 一起丢弃。受影响四处已统一改用容错切分 `utils/wos_text.split_wos_records`：`converters/batch.py`（AI 标准化路径——此前启用 AI 时最终输出永久少第一条文献）、`standardizers/enrichment.py`、`analysis/plot_types.py` 与 `analysis/plot_citations.py`（文档类型图 WoS/Scopus 列各少算 1 条）。实测 `wos.txt` 149→150、`scopus_converted_to_wos.txt` 152→153，与 ER 计数一致。

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bibliometric Data Consolidation Tool - 现代化GUI v5.1.0
+Bibliometric Data Consolidation Tool - 现代化GUI v5.2.0
 
 功能特点：
 - 🎨 现代化卡片式设计（支持滚动、窗口调整）
@@ -17,7 +17,7 @@ Bibliometric Data Consolidation Tool - 现代化GUI v5.1.0
 作者：Meng Linghan
 开发工具：Claude Code
 日期：2026-01-15
-版本：v5.1.0 (Stable Release)
+版本：v5.2.0 (Stable Release)
 """
 
 import threading

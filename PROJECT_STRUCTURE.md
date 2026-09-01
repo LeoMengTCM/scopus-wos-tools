@@ -1,8 +1,8 @@
 # 项目结构说明
 
 **当前定位**：以 WOS 为主标准的 Scopus→WOS 转换与整合系统  
-**当前文档状态**：post-5.1.0 本地迭代  
-**更新日期**：2026-04-06
+**当前文档状态**：5.2.0  
+**更新日期**：2026-09-01
 
 ## 项目概览
 
@@ -92,16 +92,24 @@
 
 与当前项目定位最相关的目录。
 
-- `src/bibliometrics/converters/scopus.py`：Scopus → WOS 风格转换主逻辑
+- `src/bibliometrics/converters/scopus.py`：Scopus → WOS 风格转换主流程（`ScopusToWosConverter`）
 - `src/bibliometrics/converters/batch.py`：批处理转换逻辑
 - `src/bibliometrics/converters/author_database.py`：作者标准化辅助数据库逻辑
 
-当前 round 迭代中，`src/bibliometrics/converters/scopus.py` 是最关键文件，尤其集中在：
+转换过程中与实例状态无关的纯规则，已按领域拆成独立模块（下划线前缀表示包内实现细节）：
 
-- WOS 语料校准
-- `C3` 选择与补充
-- companion / parent 级机构恢复
-- affiliation 映射合理性保护
+| 模块 | 职责 |
+| --- | --- |
+| `_normalization.py` | 文本归一化原语：重音折叠、查找键、机构相似度、地址分词（带 `lru_cache`） |
+| `_authors.py` | 作者姓名解析、缩写、复合姓氏修复、东亚姓名拆分、人名查找键 |
+| `_c3_names.py` | C3 机构名的分类判定（组织级 / 下级单位 / 街道地址）与层级关系判断 |
+| `_correspondence.py` | 通讯作者（RP）识别，邮箱证据消歧 |
+| `_references.py` | 参考文献（CR）解析与 WOS 格式化 |
+| `_fields.py` | 国家名、机构名、页码、ISSN 的 WOS 写法规范化 |
+
+`scopus.py` 中保留的是**依赖实例状态的部分**：配置加载、WOS 参考语料校准、
+各类 `reference_*` 映射的构建与查询，以及记录级转换编排。当前 round 迭代最关键的
+`C3` 选择与 companion 恢复仍在 `scopus.py` 内，因为它们依赖校准得到的实例状态。
 
 ### `src/bibliometrics/pipeline/`
 
@@ -146,7 +154,24 @@
 ## 工程化补充
 
 - `pyproject.toml`：项目打包元数据、依赖声明与 console scripts
-- `tests/`：当前最小 smoke tests，覆盖 CLI 解析、工作流模型和兼容导入路径
+- `tests/`：
+  - `test_smoke.py`：CLI 解析、工作流模型与兼容导入路径
+  - `test_regressions.py`：锁定历史数据丢失 bug 的单元回归
+  - `test_golden_output.py`：**输出回归网**——在临时目录跑一遍 `Example --no-ai`
+    全流程，比对 `tests/golden/expected.json` 中的产物基线
+- `scripts/update_golden.py`：重建输出基线（先打印差异，确认后加 `--yes` 写入）
+
+### 输出基线（golden file）
+
+`tests/golden/expected.json` 为每个产物记录两类指纹：
+
+- **WOS 风格数据产物**：整份文件的 sha256，外加记录条数与每个 WOS 字段标签的出现
+  记录数。哈希发现"变了"，字段计数指出"变在哪"——历史上的两类静默数据丢失
+  （每个文件丢首条记录、合并输出丢 WC/SC/FU 字段）正是这种形态。
+- **报告类产物**：规范化掉数据目录路径与运行耗时后的 sha256。
+
+核心代码改动后跑 `python3 -m unittest discover tests` 即可确认输出零回归。若输出变化
+是预期的，用 `scripts/update_golden.py` 重建基线，并在提交信息里说明输出为什么变。
 
 ## 当前使用文档
 
